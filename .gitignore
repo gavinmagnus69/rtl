@@ -1,0 +1,121 @@
+# Игнорируем скомпилированные бинарные файлы
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.a
+*.lib
+*.dylib
+
+# Объектные файлы и промежуточные файлы компиляции
+*.o
+*.obj
+*.lo
+*.ilk
+*.pdb
+*.exp
+
+# Файлы, созданные CMake и другими системами сборки
+build/
+out/
+bin/
+bin-int/
+x64/
+x86/
+Debug/
+Release/
+.vs/
+.idea/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Файлы IDE (Visual Studio, CLion, Xcode)
+*.sln
+*.vcxproj*
+*.vcproj
+*.user
+*.filters
+*.suo
+*.ncb
+*.opendb
+*.cproject
+*.project
+*.workspace
+
+# Системные и временные файлы
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.log
+*.tmp
+*.bak
+
+# Игнорируем локальные настройки и кэш
+.cache/
+.vscode/
+.clangd/
+compile_commands.json 
+
+
+Log/
+Deploy/
+Data/
+Dump/
+
+# C++ objects and libs
+*.slo
+*.lo
+*.o
+*.a
+*.la
+*.lai
+*.so
+*.so.*
+*.dll
+*.dylib
+
+*build-*
+build/
+
+# QtCreator
+*.autosave
+
+# QtCreator Qml
+*.qmlproject.user
+*.qmlproject.user.*
+
+# QtCreator CMake
+CMakeLists.txt.user*
+
+# QtCreator 4.8< compilation database 
+compile_commands.json
+
+# QtCreator local machine specific files for imported projects
+*creator.user*
+
+# AtH stuff
+*.swp
+debug/
+saves/
+#clangd
+.cache/*
+.clang-tidy
+#VisualStudioCode
+.vscode/*
+
+# Visual Studio
+.vs/
+CMakeSettings.json
+CMakePresets.json
+CMakeUserPresets.json
+
+# IntelliJ CLion
+.idea/
+OFFLINE/
+
+Deploy.zip
