@@ -17,7 +17,7 @@ public:
         m_notEmptyQueue.notify_one();
     }
 
-    //blocking current thread
+    //takes and pops
     T take() {
         std::unique_lock lock(m_mutex);
         while(m_buffer.empty()) {
