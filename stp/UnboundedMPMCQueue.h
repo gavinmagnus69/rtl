@@ -5,7 +5,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
-
+#include <shared_mutex>
 namespace rtl {
 namespace stp {
 
@@ -27,11 +27,11 @@ public:
         }
         return std::move(takeLocked());
     }
-    bool empty() {
+    bool empty() const {
         std::lock_guard lock(m_mutex);
         return m_buffer.empty();
     }
-    size_t size() {
+    size_t size() const {
         std::lock_guard lock(m_mutex);
         return m_buffer.size();
     }
@@ -46,7 +46,7 @@ private:
         // lock.unlock();
         return std::move(task);
     }
-    std::mutex m_mutex;
+    mutable std::mutex m_mutex;
     std::condition_variable m_notEmptyQueue;
     std::deque<T> m_buffer;
 };
