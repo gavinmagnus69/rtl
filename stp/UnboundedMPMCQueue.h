@@ -5,7 +5,9 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
+
 namespace rtl {
 namespace stp {
 
@@ -27,6 +29,15 @@ public:
         }
         return std::move(takeLocked());
     }
+
+    std::optional<T> tryTake(size_t time_out_ms) {
+        std::unique_lock lock(m_mutex);
+        if (!m_notEmptyQueue.wait_for(lock, std::chrono::milliseconds(time_out_ms), [this] { return !m_buffer.empty(); })) {
+            return std::nullopt; // timed out and still empty
+        }
+        return std::move(takeLocked());
+    }
+
     bool empty() const {
         std::lock_guard lock(m_mutex);
         return m_buffer.empty();
