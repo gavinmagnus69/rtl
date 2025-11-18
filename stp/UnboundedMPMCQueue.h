@@ -30,7 +30,7 @@ public:
         return std::move(takeLocked());
     }
 
-    std::optional<T> tryTake(size_t time_out_ms) {
+    std::optional<T> tryTake(size_t time_out_ms = 100) {
         std::unique_lock lock(m_mutex);
         if (!m_notEmptyQueue.wait_for(lock, std::chrono::milliseconds(time_out_ms), [this] { return !m_buffer.empty(); })) {
             return std::nullopt; // timed out and still empty
