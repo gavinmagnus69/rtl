@@ -7,20 +7,30 @@
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <utility> // for std::forward
+
 
 namespace rtl {
 namespace stp {
 
-// Thread-safe unounded Multi-producer Multi-consumer queue.
+// Thread-safe unbounded Multi-producer Multi-consumer queue.
 template <typename T>
 class UnboundedMPMCQueue {
 public:
     // Thread-safe puts and pushes.
-    void put(T task) {
+    template <typename U>
+    void put(U&& task) {
         std::lock_guard lock(m_mutex);
-        m_buffer.emplace_back(std::move(task));
+        m_buffer.emplace_back(std::forward<U>(task));
         m_notEmptyQueue.notify_one();
     }
+
+    // Thread-safe puts and pushes.
+    // void put(T task) {
+    //     std::lock_guard lock(m_mutex);
+    //     m_buffer.emplace_back(std::move(task));
+    //     m_notEmptyQueue.notify_one();
+    // }
     // Thread-safe takes and pops. Blocks if empty.
     T take() {
         std::unique_lock lock(m_mutex);
@@ -30,11 +40,14 @@ public:
         return std::move(takeLocked());
     }
 
+    // trying to take with timeout, returns nullopt if timed out
+    // memory issues here? extra copying/moving happens when returning optional
     std::optional<T> tryTake(size_t time_out_ms = 100) {
         std::unique_lock lock(m_mutex);
         if (!m_notEmptyQueue.wait_for(lock, std::chrono::milliseconds(time_out_ms), [this] { return !m_buffer.empty(); })) {
             return std::nullopt; // timed out and still empty
         }
+        // have item and no timeout
         return std::move(takeLocked());
     }
 
