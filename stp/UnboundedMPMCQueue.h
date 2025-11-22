@@ -25,12 +25,6 @@ public:
         m_notEmptyQueue.notify_one();
     }
 
-    // Thread-safe puts and pushes.
-    // void put(T task) {
-    //     std::lock_guard lock(m_mutex);
-    //     m_buffer.emplace_back(std::move(task));
-    //     m_notEmptyQueue.notify_one();
-    // }
     // Thread-safe takes and pops. Blocks if empty.
     T take() {
         std::unique_lock lock(m_mutex);

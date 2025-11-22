@@ -1,12 +1,13 @@
 #ifndef threadpool_src_staticthreadpool_h
 #define threadpool_src_staticthreadpool_h
 
-
-#include <thread>
-#include <mutex>
 #include <condition_variable>
-#include <vector>
 #include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 
 #include "UnboundedMPMCQueue.h"
@@ -15,13 +16,23 @@ namespace rtl {
 namespace stp {
 
 using Task = std::function<void(void)>;
-    
+
 class StaticThreadPool {
 public:
     StaticThreadPool(uint16_t);
     ~StaticThreadPool();
 public:
-    void putTask(Task&&); 
+    template <typename T>
+    std::future<T> addTask(std::function<T()> func) {
+        // std::function requires copyable callables, so keep the task behind a shared_ptr
+        // to allow the wrapper to be copied as it moves through the queue.
+        auto taskPtr = std::make_shared<std::packaged_task<T()>>(std::move(func));
+        std::future<T> fut = taskPtr->get_future();
+        Task wrappedTask = [taskPtr]() mutable { (*taskPtr)(); };
+        m_taskQueue.put(std::move(wrappedTask));
+        return fut;
+    }
+    void putTask(Task&&);
     void joinAll();
 private:
     void initAll(uint16_t);
@@ -32,6 +43,6 @@ private:
     std::atomic<bool> m_releaseAllWorkers;
     std::atomic<bool> m_isJoined;
 };
-};
-};
+}; // namespace stp
+}; // namespace rtl
 #endif

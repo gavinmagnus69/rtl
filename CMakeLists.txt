@@ -27,7 +27,11 @@ add_subdirectory(stp)
 add_subdirectory(json)
 # add_subdirectory(collectors)
 
+
 # add_subdirectory(protocol)
+add_subdirectory(test)
+
+
 add_library(${PROJECT_NAME} INTERFACE)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
