@@ -24,13 +24,17 @@ public:
 public:
     template <typename T>
     std::future<T> addTask(std::function<T()> func) {
+        auto taskPtr = std::make_shared<std::packaged_task<T()>>(std::move(func));
+        try {
+            std::future<T> fut = taskPtr->get_future();
+            Task wrappedTask = [taskPtr]() mutable { (*taskPtr)(); };
+            m_taskQueue.put(std::move(wrappedTask));
+            return fut;
+        } catch (...) {
+            taskPtr->set_exception(std::current_exception());
+        }
         // std::function requires copyable callables, so keep the task behind a shared_ptr
         // to allow the wrapper to be copied as it moves through the queue.
-        auto taskPtr = std::make_shared<std::packaged_task<T()>>(std::move(func));
-        std::future<T> fut = taskPtr->get_future();
-        Task wrappedTask = [taskPtr]() mutable { (*taskPtr)(); };
-        m_taskQueue.put(std::move(wrappedTask));
-        return fut;
     }
     void putTask(Task&&);
     void joinAll();
