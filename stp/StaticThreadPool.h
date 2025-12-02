@@ -31,7 +31,8 @@ public:
             m_taskQueue.put(std::move(wrappedTask));
             return fut;
         } catch (...) {
-            taskPtr->set_exception(std::current_exception());
+            // taskPtr->set_exception(std::current_exception());
+            throw std::current_exception();
         }
         // std::function requires copyable callables, so keep the task behind a shared_ptr
         // to allow the wrapper to be copied as it moves through the queue.

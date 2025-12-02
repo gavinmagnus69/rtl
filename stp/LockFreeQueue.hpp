@@ -36,38 +36,40 @@ public:
     void push(const T& value) {
         Node* new_node = new Node(value);
         while (true) {
-            Node* cur_tail = m_tail.load();
-            Node* cur_tail_next = cur_tail->next.load();
-            if (cur_tail != m_tail.load()) {
+            Node* cur_tail = m_tail.load(std::memory_order_acquire);
+            Node* cur_tail_next = cur_tail->next.load(std::memory_order_acquire);
+            if (cur_tail != m_tail.load(std::memory_order_acquire)) {
                 continue;
             }
             if (cur_tail_next == nullptr) {
-                if (cur_tail->next.compare_exchange_weak(cur_tail_next, new_node)) {
-                    m_tail.compare_exchange_weak(cur_tail, new_node);
+                if (cur_tail->next.compare_exchange_weak(cur_tail_next, new_node, std::memory_order_release, std::memory_order_relaxed)) {
+                    m_tail.compare_exchange_weak(cur_tail, new_node, std::memory_order_release, std::memory_order_relaxed);
                     return;
                 }
             } else {
-                m_tail.compare_exchange_weak(cur_tail, cur_tail_next);
+                m_tail.compare_exchange_weak(cur_tail, cur_tail_next, std::memory_order_release, std::memory_order_relaxed);
             }
         }
     }
 
     std::optional<T> pop() {
         while (true) {
-            Node* cur_head = m_head.load();
-            Node* cur_tail = m_tail.load();
-            Node* head_next = cur_head->next.load();
+            Node* cur_head = m_head.load(std::memory_order_acquire);
+            Node* cur_tail = m_tail.load(std::memory_order_acquire);
+            Node* head_next = cur_head->next.load(std::memory_order_acquire);
             // check if head is expected head
             if (cur_head == cur_tail) {
                 // empty queue case
-                if (cur_head == m_tail.load()) {
+                if (cur_head == m_tail.load(std::memory_order_acquire)) {
                     if (head_next == nullptr) {
                         return std::nullopt;
                     }
-                    m_tail.compare_exchange_weak(cur_tail, head_next);
+                    m_tail.compare_exchange_weak(cur_tail, head_next, std::memory_order_release,
+                            std::memory_order_relaxed);
                 } else {
                     auto data = head_next->m_value;
-                    if (m_head.compare_exchange_weak(cur_head, head_next)) {
+                    if (m_head.compare_exchange_weak(cur_head, head_next, std::memory_order_release,
+                            std::memory_order_relaxed)) {
                         delete cur_head;
                         return data;
                     }
