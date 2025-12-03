@@ -25,6 +25,7 @@ endif()
 
 add_subdirectory(stp)
 add_subdirectory(json)
+add_subdirectory(allocators)
 # add_subdirectory(collectors)
 
 
@@ -38,6 +39,7 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} INTERFACE
     librtlstp::librtlstp
     librtljson::librtljson
+    librtlallocators::librtlallocators
     nlohmann_json::nlohmann_json
 
     # librtlprotocol::librtlprotocol
