@@ -23,14 +23,18 @@ void stp_test() {
 
 
 void allocator_test() {
-    std::vector<int, rtl::LinearAllocator<int>> vec;
+
+    std::vector<int, rtl::BlockAllocator<int>> vec;
+    auto newVec = vec;
     vec.reserve(100);
     vec.push_back(4);
+    newVec.push_back(12);
     for (int i = 0; i < 20; i++) {
         vec.push_back(i);
         std::cout << i << " vec[i]" << vec[i] << '\n';
         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    newVec.push_back(12);
 
     // vec.push_back(4);
     // vec.push_back(4);
