@@ -57,21 +57,18 @@ public:
             Node* cur_head = m_head.load(std::memory_order_acquire);
             Node* cur_tail = m_tail.load(std::memory_order_acquire);
             Node* head_next = cur_head->next.load(std::memory_order_acquire);
-            // check if head is expected head
+            // check if head is expected head in current context
             if (cur_head == cur_tail) {
-                // empty queue case
-                if (cur_head == m_tail.load(std::memory_order_acquire)) {
-                    if (head_next == nullptr) {
-                        return std::nullopt;
-                    }
-                    m_tail.compare_exchange_weak(cur_tail, head_next, std::memory_order_release, std::memory_order_relaxed);
-                } else {
-                    auto data = head_next->m_value;
-                    if (m_head.compare_exchange_weak(cur_head, head_next, std::memory_order_release, std::memory_order_relaxed)) {
-                        delete cur_head;
-                        return data;
-                    }
+                if (head_next == nullptr) {
+                    return std::nullopt;
                 }
+                m_tail.compare_exchange_weak(cur_tail, head_next, std::memory_order_release, std::memory_order_relaxed);
+                continue;
+            }
+            if (m_head.compare_exchange_weak(cur_head, head_next, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                auto data = head_next->m_value;
+                delete cur_head;
+                return data;
             }
         }
     }

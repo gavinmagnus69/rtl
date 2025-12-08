@@ -1,6 +1,8 @@
 #include <future>
 #include <iostream>
 
+
+#include <BlockAllocator.hpp>
 #include <LinearAllocator.hpp>
 #include <StaticThreadPool.h>
 #include <UnboundedMPMCQueue.h>
