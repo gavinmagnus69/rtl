@@ -64,12 +64,10 @@ public:
                     if (head_next == nullptr) {
                         return std::nullopt;
                     }
-                    m_tail.compare_exchange_weak(cur_tail, head_next, std::memory_order_release,
-                            std::memory_order_relaxed);
+                    m_tail.compare_exchange_weak(cur_tail, head_next, std::memory_order_release, std::memory_order_relaxed);
                 } else {
                     auto data = head_next->m_value;
-                    if (m_head.compare_exchange_weak(cur_head, head_next, std::memory_order_release,
-                            std::memory_order_relaxed)) {
+                    if (m_head.compare_exchange_weak(cur_head, head_next, std::memory_order_release, std::memory_order_relaxed)) {
                         delete cur_head;
                         return data;
                     }

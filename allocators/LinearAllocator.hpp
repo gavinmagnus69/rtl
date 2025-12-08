@@ -1,6 +1,8 @@
 #ifndef rtl_stp_linearallocator_hpp
 #define rtl_stp_linearallocator_hpp
 
+
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <format>
@@ -28,11 +30,8 @@ template <typename T>
 class BlockAllocator {
 public:
     using value_type = T;
-
-
     BlockAllocator() {
         std::cout << "Default constructor\n";
-        m_offset = std::make_shared<std::atomic<size_t>>(0);
         m_buffer = std::make_shared<std::array<unsigned char, LINEAR_ALLOCATOR_BLOCK_SIZE>>(); // allocating 1 MB block on the heap in the vector
         m_allocatedBlocks = std::make_shared<std::array<AllocatorBlock, BlocksSize>>();
         m_freeBlocks = std::make_shared<std::array<AllocatorBlock, BlocksSize>>();
@@ -44,9 +43,7 @@ public:
     BlockAllocator(const BlockAllocator& other) noexcept
         : m_allocatedBlocks(other.m_allocatedBlocks)
         , m_freeBlocks(other.m_freeBlocks)
-        , m_buffer(other.m_buffer)
-        , m_offset(other.m_offset)
-    {
+        , m_buffer(other.m_buffer) {
     }
 
 
@@ -61,6 +58,7 @@ public:
         printFreeBlocks();
         return ptr;
     }
+
     void deallocate(T* p, std::size_t n) noexcept {
         printAllocatedBlocks();
         printFreeBlocks();
@@ -71,52 +69,36 @@ public:
             if (block.block_ptr == (void*)p) {
                 freeBlock.block_ptr = (void*)p;
                 freeBlock.block_size = block.block_size;
-
                 return;
             }
         }
     }
 private:
-    AllocatorBlock& searchFreeBlock() {
-        for (auto& block : *m_freeBlocks) {
-            if (block.block_ptr == nullptr) {
-                return block;
-            }
-        }
-    }
-    T* allocateNewBlock(size_t size) {
-        return nullptr;
-    }
-
-
     T* allocateToFreeBlock(size_t size) {
         for (auto& block : *m_freeBlocks) {
             // success case (free block founded)
             if (block.block_ptr != nullptr && block.block_size >= size * sizeof(value_type)) {
-                std::cout << "Success case\n";
                 T* ptr = reinterpret_cast<T*>(block.block_ptr); // pointer to occupy
-                                                                // bytes that left after occupying free block
                 auto& blockToAllocate = searchNullptrInAllocatedBlock();
                 blockToAllocate.block_ptr = block.block_ptr;
                 blockToAllocate.block_size = size * sizeof(value_type);
+                // bytes that left after occupying free block
                 if (size_t bytesLeft = block.block_size - size * sizeof(value_type); bytesLeft > 0) {
-                    block.block_ptr = (T*)block.block_ptr + size * sizeof(value_type);
+                    block.block_ptr = (T*)block.block_ptr + size; // pointer arithmetics
                     block.block_size = bytesLeft;
                 } else {
-                    // freeing block
-                    block.block_ptr = nullptr;
-                    block.block_size = 0;
+                    makeBlockNullptr(block);
                 }
-
                 assert(ptr != nullptr && "Ptr is nullptr");
                 // what if we consume all free space in block
                 return ptr;
             }
         }
         // means no free block
-        assert(true && "What happened bro????");
+        assert(false && "No free blocks available");
         return nullptr; // if no free block
     }
+
     AllocatorBlock& searchNullptrInFreeBlock() {
         for (auto& block : *m_freeBlocks) {
             if (block.block_ptr == nullptr) {
@@ -124,7 +106,9 @@ private:
             }
         }
         assert(false && "failed to find nullptr free block");
+        return m_allocatedBlocks->at(0);
     }
+
     AllocatorBlock& searchNullptrInAllocatedBlock() {
         for (auto& block : *m_allocatedBlocks) {
             if (block.block_ptr == nullptr) {
@@ -132,6 +116,12 @@ private:
             }
         }
         assert(false && "No free blocks");
+        return m_allocatedBlocks->at(0);
+    }
+
+    void makeBlockNullptr(AllocatorBlock& block) {
+        block.block_ptr = nullptr;
+        block.block_size = 0;
     }
 
     void printAllocatedBlocks() {
@@ -153,13 +143,13 @@ private:
             }
         }
     }
+
     void printBlock(const AllocatorBlock& block) {
         std::cout << std::hex << block.block_ptr << " " << std::dec << block.block_size << '\n';
     }
 private:
     std::shared_ptr<std::array<AllocatorBlock, BlocksSize>> m_allocatedBlocks{nullptr};
     std::shared_ptr<std::array<AllocatorBlock, BlocksSize>> m_freeBlocks{nullptr}; // free blocks are all
-    std::shared_ptr<std::atomic<size_t>> m_offset{nullptr};
     std::shared_ptr<std::array<unsigned char, LINEAR_ALLOCATOR_BLOCK_SIZE>> m_buffer{nullptr};
 };
 
