@@ -1,7 +1,7 @@
 #ifndef rtl_stp_blockallocator_hpp
 #define rtl_stp_blockallocator_hpp
 
-
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -52,6 +52,7 @@ public:
     T* allocate(size_t n) {
         std::cout << std::format("trying to allocate {} elements of {} bytes\n", n, sizeof(value_type) * n);
         T* ptr = allocateToFreeBlock(n);
+        mergeFreeBlocks();
         // assert(ptr == nullptr && "Something happened");
         assert(ptr != nullptr && "Nullptr");
         printAllocatedBlocks();
@@ -69,6 +70,7 @@ public:
             if (block.block_ptr == (void*)p) {
                 freeBlock.block_ptr = (void*)p;
                 freeBlock.block_size = block.block_size;
+                mergeFreeBlocks();
                 return;
             }
         }
@@ -145,7 +147,27 @@ private:
     }
 
     void printBlock(const AllocatorBlock& block) {
-        std::cout << std::hex << block.block_ptr << " " << std::dec << block.block_size << '\n';
+        std::cout << std::hex << block.block_ptr << ", address in dec: " << std::dec << block.block_ptr << ", block size: " << block.block_size << '\n';
+    }
+// TODO: not optimal implementation, needs improvement
+    void mergeFreeBlocks() {
+        std::cout << "Merging free blocks:\n";
+        printFreeBlocks();
+        std::sort(m_freeBlocks->begin(), m_freeBlocks->end(), [](const AllocatorBlock& left, const AllocatorBlock& right) { return std::less<void>{}(left.block_ptr, right.block_ptr); });
+        for (size_t i = 0; i < BlocksSize - 1; ++i) {
+            auto& currentBlock = m_freeBlocks->at(i);
+            auto& nextBlock = m_freeBlocks->at(i + 1);
+            if (currentBlock.block_ptr != nullptr && nextBlock.block_ptr != nullptr) {
+                unsigned char* currentEndPtr = reinterpret_cast<unsigned char*>(currentBlock.block_ptr) + currentBlock.block_size;
+                if (currentEndPtr == nextBlock.block_ptr) {
+                    // merging
+                    currentBlock.block_size += nextBlock.block_size;
+                    makeBlockNullptr(nextBlock);
+                }
+            }
+        }
+        std::cout << "after merging:\n";
+        printFreeBlocks();
     }
 private:
     std::shared_ptr<std::array<AllocatorBlock, BlocksSize>> m_allocatedBlocks{nullptr};
