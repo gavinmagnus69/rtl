@@ -1,5 +1,7 @@
 #include <future>
 #include <iostream>
+#include <memory>
+#include <thread>
 
 
 #include <BlockAllocator.hpp>
@@ -24,27 +26,67 @@ void stp_test() {
 }
 
 
-void allocator_test() {
+// void allocator_test() {
 
-    std::vector<int, rtl::BlockAllocator<int>> vec;
-    auto newVec = vec;
-    vec.reserve(100);
-    vec.push_back(4);
-    newVec.push_back(12);
-    for (int i = 0; i < 20; i++) {
-        vec.push_back(i);
-        std::cout << i << " vec[i]" << vec[i] << '\n';
-        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//     std::vector<int, rtl::BlockAllocator<int>> vec;
+//     auto newVec = vec;
+//     vec.reserve(100);
+//     vec.push_back(4);
+//     newVec.push_back(12);
+//     for (int i = 0; i < 20; i++) {
+//         vec.push_back(i);
+//         std::cout << i << " vec[i]" << vec[i] << '\n';
+//         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//     }
+//     newVec.push_back(12);
+
+//     // vec.push_back(4);
+//     // vec.push_back(4);
+//     // vec.push_back(4);
+//     // vec.push_back(4);
+// }
+
+
+template <typename F, typename... Args>
+auto invokeTest(F func, Args... args) -> std::invoke_result<F, Args...>::type {
+    try {
+        if (std::is_invocable_v<F, Args...> == false) {
+            throw std::invalid_argument("Function is not invocable with the given arguments.");
+        }
+        auto result = std::invoke(std::forward<F>(func), std::forward<Args>(args)...);
+        return std::move(result);
+    } catch (const std::exception& exp) {
+        std::cerr << exp.what() << '\n';
     }
-    newVec.push_back(12);
+}
 
-    // vec.push_back(4);
-    // vec.push_back(4);
-    // vec.push_back(4);
-    // vec.push_back(4);
+
+template <typename F, typename... Args>
+auto enqueue(F func, Args... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
+    using ReturnType = typename std::invoke_result<F, Args...>::type; // this return type of the function
+    auto tasking = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(std::forward<F>(func), std::forward<Args>(args)...));
+    auto returnFuture = tasking->get_future();
+    auto closure = [tasking]() mutable {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        (*tasking)();
+    };
+    std::cout << "Starting thread...\n";
+    std::thread thread(std::move(closure));
+    thread.detach();
+    return returnFuture;
+}
+
+
+int sum(int a, int b) {
+    return a + b;
 }
 
 
 int main() {
-    allocator_test();
+    // auto res = invokeTest(sum, 5, 7);
+    std::cout << "Enqueuing task...\n";
+    auto futureRes = enqueue(sum, 5, 7);
+    std::cout << "Doing other work while waiting for the result...\n";
+    std::cout << futureRes.get() << '\n';
+    // allocator_test();
 }
