@@ -6,6 +6,7 @@
 
 #include <BlockAllocator.hpp>
 #include <LinearAllocator.hpp>
+#include <RtlThreadPool.hpp>
 #include <StaticThreadPool.h>
 #include <UnboundedMPMCQueue.h>
 
@@ -78,15 +79,27 @@ auto enqueue(F func, Args... args) -> std::future<typename std::invoke_result<F,
 
 
 int sum(int a, int b) {
+    std::cout << "Calculating sum of " << a << " and " << b << "...\n";
     return a + b;
 }
 
 
+void vector_size_test() {
+    std::vector<std::thread> threads;
+    
+}
+
 int main() {
     // auto res = invokeTest(sum, 5, 7);
     std::cout << "Enqueuing task...\n";
-    auto futureRes = enqueue(sum, 5, 7);
-    std::cout << "Doing other work while waiting for the result...\n";
-    std::cout << futureRes.get() << '\n';
+    rtl::stp::ThreadPool thp(2, 4);
+    auto futureResult = thp.put(sum, 5, 7);
+    thp.put_periodic(500, sum, 5, 2);
+    std::cout << "Doing other work in main thread...\n";
+    int result = futureResult.get();
+    std::cout << "The sum is: " << result << '\n';
+    std::cout << "Main thread sleeping for 10 seconds to allow periodic tasks to run...\n";
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+    std::cout << "Main thread slept\n";
     // allocator_test();
 }
