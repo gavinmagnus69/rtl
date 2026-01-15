@@ -6,6 +6,8 @@ add_library(${PROJECT_NAME} STATIC
     UnboundedMPMCQueue.h
     RtlThreadPool.hpp
     RtlThreadPool.cpp
+    IExecutor.hpp
+    IExecutor.cpp
 )
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
