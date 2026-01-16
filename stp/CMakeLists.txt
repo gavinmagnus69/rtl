@@ -8,6 +8,8 @@ add_library(${PROJECT_NAME} STATIC
     RtlThreadPool.cpp
     IExecutor.hpp
     IExecutor.cpp
+    ThreadPoolExecutor.hpp
+    ThreadPoolExecutor.cpp
 )
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 

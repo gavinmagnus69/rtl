@@ -17,7 +17,7 @@ using Task = std::function<void()>;
 struct IExecutor {
     virtual ~IExecutor() = default;
     template <typename Func, typename... Args>
-    auto submit(Func&& func, Args&&... args, TaskOptions opt) -> std::future<typename std::invoke_result<Func, Args...>::type> {
+    auto submit(TaskOptions opt, Func&& func, Args&&... args) -> std::future<typename std::invoke_result<Func, Args...>::type> {
         using ReturnType = typename std::invoke_result<Func, Args...>::type;
         auto boundPackagedTaskPtr = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(std::forward<Func>(func), std::forward<Args>(args)...));
         auto returnFuture = boundPackagedTaskPtr->get_future();

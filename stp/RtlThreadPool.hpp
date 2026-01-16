@@ -52,7 +52,7 @@ public:
     }
 public:
     template <typename F, typename... Args>
-    [[nodiscard]] auto put(F&& func, Args&&... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
+    auto put(F&& func, Args&&... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
         if (m_stopRequested.load(std::memory_order_relaxed)) {
             throw std::runtime_error("ThreadPool has been stopped, cannot add new tasks.");
         }

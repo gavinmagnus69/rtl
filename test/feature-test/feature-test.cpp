@@ -1,6 +1,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <source_location>
 #include <thread>
 
 
@@ -8,7 +9,13 @@
 #include <LinearAllocator.hpp>
 #include <RtlThreadPool.hpp>
 #include <StaticThreadPool.h>
+#include <ThreadPoolExecutor.hpp>
 #include <UnboundedMPMCQueue.h>
+
+
+void thread_sleep(size_t ms = 10000) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
 
 
 void stp_test() {
@@ -84,12 +91,7 @@ int sum(int a, int b) {
 }
 
 
-void vector_size_test() {
-    std::vector<std::thread> threads;
-    
-}
-
-int main() {
+void test1() {
     // auto res = invokeTest(sum, 5, 7);
     std::cout << "Enqueuing task...\n";
     rtl::stp::ThreadPool thp(2, 4);
@@ -102,4 +104,24 @@ int main() {
     std::this_thread::sleep_for(std::chrono::seconds(10));
     std::cout << "Main thread slept\n";
     // allocator_test();
+}
+
+
+void test2() {
+    std::cout << std::source_location::current().function_name() << ' ' << std::source_location::current().file_name();
+}
+
+
+void test3() {
+    using namespace rtl::stp;
+    auto tp = rtl::stp::makeThreadPoolExecutor();
+    TaskOptions opt{true, 500};
+    auto ans = tp->submit(opt, sum, 5, 7);
+    thread_sleep();
+}
+
+
+int main() {
+    test3();
+    // thread_sleep();
 }
