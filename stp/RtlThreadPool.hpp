@@ -78,7 +78,7 @@ public:
             return;
         }
         try {
-            add_periodic_thread(repeat_time_ms, std::bind(std::forward<F>(func), std::forward<Args>(args)...));
+            add_periodic_thread(repeat_time_ms, std::bind(std::forward<F>(func), std::forward<Args>(args)...)); // copy of task?
         } catch (const std::exception& exp) {
             std::cerr << exp.what() << '\n';
         } catch (...) {
@@ -131,13 +131,14 @@ private:
             return;
         }
         ++m_currentPeriodicThreadCount;
-        m_periodicWorkers.emplace_back([this, task, task_interval_ms]() {
+        // std::move? task
+        m_periodicWorkers.emplace_back([this, t = std::move(task), task_interval_ms]() {
             while (true) {
                 if (m_stopRequested.load(std::memory_order_relaxed)) {
                     break;
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(task_interval_ms)); // change it on cv wait later
-                task();
+                t();
             }
         });
     }

@@ -14,6 +14,7 @@ namespace stp {
 struct ThreadPoolExecutor final : public IExecutor {
 public:
     virtual ~ThreadPoolExecutor() override {
+
         // assert(false && "TODO");
         //  RAII threadPool destruction
     }
@@ -42,7 +43,7 @@ private:
 };
 
 
-auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) -> std::unique_ptr<ThreadPoolExecutor> {
+auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) -> std::unique_ptr<IExecutor> {
     return std::make_unique<ThreadPoolExecutor>(current_threads, max_threads);
 }
 

@@ -13,6 +13,8 @@
 #include <UnboundedMPMCQueue.h>
 
 
+#include "spdlog/spdlog.h"
+
 void thread_sleep(size_t ms = 10000) {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
@@ -86,42 +88,55 @@ auto enqueue(F func, Args... args) -> std::future<typename std::invoke_result<F,
 
 
 int sum(int a, int b) {
-    std::cout << "Calculating sum of " << a << " and " << b << "...\n";
+    SPDLOG_INFO("Calculating sum of {} and {}\n", a, b);
     return a + b;
 }
 
-
+// working correctly
 void test1() {
-    // auto res = invokeTest(sum, 5, 7);
-    std::cout << "Enqueuing task...\n";
+    SPDLOG_INFO("Enqueuing task...\n");
     rtl::stp::ThreadPool thp(2, 4);
+    thp.put_periodic(500, std::move(sum), 5, 2);
     auto futureResult = thp.put(sum, 5, 7);
-    thp.put_periodic(500, sum, 5, 2);
-    std::cout << "Doing other work in main thread...\n";
+    SPDLOG_INFO("Doing other work in main thread...\n");
     int result = futureResult.get();
-    std::cout << "The sum is: " << result << '\n';
-    std::cout << "Main thread sleeping for 10 seconds to allow periodic tasks to run...\n";
-    std::this_thread::sleep_for(std::chrono::seconds(10));
-    std::cout << "Main thread slept\n";
-    // allocator_test();
+    SPDLOG_INFO("The sum is: {}\n", result);
+    SPDLOG_INFO("Main thread sleeping for 10 seconds to allow periodic tasks to run...\n");
+    // std::this_thread::sleep_for(std::chrono::seconds(10));
+    thread_sleep();
+    SPDLOG_INFO("Main thread slept\n");
 }
 
 
 void test2() {
-    std::cout << std::source_location::current().function_name() << ' ' << std::source_location::current().file_name();
+    SPDLOG_INFO("{} {}\n", std::source_location::current().function_name(), std::source_location::current().file_name());
 }
 
-
+// abort() called, unknown issue
 void test3() {
-    using namespace rtl::stp;
-    auto tp = rtl::stp::makeThreadPoolExecutor();
-    TaskOptions opt{true, 500};
-    auto ans = tp->submit(opt, sum, 5, 7);
-    thread_sleep();
+    try {
+        using namespace rtl::stp;
+        auto tp = rtl::stp::makeThreadPoolExecutor();
+        if (!tp) {
+            SPDLOG_ERROR("nullptr");
+            return;
+        }
+        TaskOptions opt{true, 500};
+        auto ans = tp->submit(opt, sum, 5, 7);
+        thread_sleep(5000);
+        SPDLOG_INFO("thread finish\n");
+        // ans.get();
+        thread_sleep(500);
+        SPDLOG_INFO("thread finish\n");
+    } catch (const std::exception& exp) {
+        SPDLOG_ERROR(exp.what());
+    }
 }
 
 
 int main() {
+    SPDLOG_INFO("feature-test");
+    // test3();
     test3();
     // thread_sleep();
 }
