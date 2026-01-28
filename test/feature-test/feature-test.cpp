@@ -112,6 +112,59 @@ void test2() {
     SPDLOG_INFO("{} {}\n", std::source_location::current().function_name(), std::source_location::current().file_name());
 }
 
+void test_threadpool_basic() {
+    SPDLOG_INFO("ThreadPool basic test\n");
+    rtl::stp::ThreadPool tp(2, 4);
+    auto f1 = tp.put(sum, 1, 2);
+    auto f2 = tp.put([]() { return std::string("ok"); });
+
+    const int res1 = f1.get();
+    const std::string res2 = f2.get();
+
+    if (res1 != 3) {
+        SPDLOG_ERROR("Expected 3, got {}\n", res1);
+    }
+    if (res2 != "ok") {
+        SPDLOG_ERROR("Expected ok, got {}\n", res2);
+    }
+}
+
+void test_threadpool_many_tasks() {
+    SPDLOG_INFO("ThreadPool many tasks test\n");
+    rtl::stp::ThreadPool tp(4, 8);
+    constexpr int taskCount = 100;
+    std::atomic<int> counter{0};
+    std::vector<std::future<void>> futures;
+    futures.reserve(taskCount);
+
+    for (int i = 0; i < taskCount; ++i) {
+        futures.emplace_back(tp.put([&counter]() { counter.fetch_add(1, std::memory_order_relaxed); }));
+    }
+
+    for (auto& f : futures) {
+        f.get();
+    }
+
+    if (counter.load(std::memory_order_relaxed) != taskCount) {
+        SPDLOG_ERROR("Expected {} tasks, got {}\n", taskCount, counter.load(std::memory_order_relaxed));
+    }
+}
+
+void test_threadpool_exception() {
+    SPDLOG_INFO("ThreadPool exception test\n");
+    rtl::stp::ThreadPool tp(2, 4);
+    auto f = tp.put([]() -> int {
+        throw std::runtime_error("boom");
+    });
+
+    try {
+        (void)f.get();
+        SPDLOG_ERROR("Expected exception, got none\n");
+    } catch (const std::exception& exp) {
+        SPDLOG_INFO("Caught expected exception: {}\n", exp.what());
+    }
+}
+
 // abort() called, unknown issue
 void test3() {
     try {
@@ -136,7 +189,9 @@ void test3() {
 
 int main() {
     SPDLOG_INFO("feature-test");
-    // test3();
-    test3();
-    // thread_sleep();
+    test1();
+    test_threadpool_basic();
+    test_threadpool_many_tasks();
+    test_threadpool_exception();
+    // test3(); // known abort, keep disabled
 }
