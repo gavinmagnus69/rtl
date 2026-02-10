@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <memory>
 
 
 #include "IExecutor.hpp"
@@ -43,9 +44,7 @@ private:
 };
 
 
-auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) -> std::unique_ptr<IExecutor> {
-    return std::make_unique<ThreadPoolExecutor>(current_threads, max_threads);
-}
+auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) -> std::unique_ptr<IExecutor>;
 
 
 }; // namespace stp
