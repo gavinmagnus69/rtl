@@ -12,6 +12,7 @@
 #include <ThreadPoolExecutor.hpp>
 #include <UnboundedMPMCQueue.h>
 
+#include <UnbMpMcTemplateQueue.hpp>
 
 #include "spdlog/spdlog.h"
 
@@ -153,9 +154,7 @@ void test_threadpool_many_tasks() {
 void test_threadpool_exception() {
     SPDLOG_INFO("ThreadPool exception test\n");
     rtl::stp::ThreadPool tp(2, 4);
-    auto f = tp.put([]() -> int {
-        throw std::runtime_error("boom");
-    });
+    auto f = tp.put([]() -> int { throw std::runtime_error("boom"); });
 
     try {
         (void)f.get();
@@ -186,12 +185,71 @@ void test3() {
     }
 }
 
+void new_container_test() {
+    using Type = int;
+    const std::vector<Type> input_data{3, 7, 1, 9, 4};
+
+    rtl::stp::UnbMpMcTemplateQueue<Type> fifo_queue;
+    using PriorityContainer = std::priority_queue<Type>;
+    rtl::stp::UnbMpMcTemplateQueue<Type, PriorityContainer> priority_queue;
+
+    SPDLOG_INFO("new_container_test: push {} items into FIFO and priority queues", input_data.size());
+    for (const auto value : input_data) {
+        fifo_queue.put(value);
+        priority_queue.put(value);
+        SPDLOG_INFO("new_container_test input -> {}", value);
+    }
+
+    SPDLOG_INFO("new_container_test: FIFO output");
+    while (!fifo_queue.empty()) {
+        auto value_opt = fifo_queue.tryTake(1);
+        if (!value_opt.has_value()) {
+            continue;
+        }
+        SPDLOG_INFO("fifo <- {}", value_opt.value());
+    }
+
+    SPDLOG_INFO("new_container_test: priority output");
+    while (!priority_queue.empty()) {
+        auto value_opt = priority_queue.tryTake(1);
+        if (!value_opt.has_value()) {
+            continue;
+        }
+        SPDLOG_INFO("priority <- {}", value_opt.value());
+    }
+
+    using MoveOnlyType = std::unique_ptr<int>;
+    struct PtrLess {
+        bool operator()(const MoveOnlyType& left, const MoveOnlyType& right) const {
+            return *left < *right;
+        }
+    };
+    using MoveOnlyPriorityContainer = rtl::stp::MovablePriorityQueue<MoveOnlyType, PtrLess>;
+    rtl::stp::UnbMpMcTemplateQueue<MoveOnlyType, MoveOnlyPriorityContainer> move_only_priority_queue;
+
+    SPDLOG_INFO("new_container_test: move-only priority output");
+    move_only_priority_queue.put(std::make_unique<int>(3));
+    move_only_priority_queue.put(std::make_unique<int>(10));
+    move_only_priority_queue.put(std::make_unique<int>(6));
+
+    while (!move_only_priority_queue.empty()) {
+        auto value_opt = move_only_priority_queue.tryTake(1);
+        if (!value_opt.has_value()) {
+            continue;
+        }
+        SPDLOG_INFO("move-only priority <- {}", *value_opt.value());
+    }
+}
+
 
 int main() {
+    new_container_test();
+    return 0;
     SPDLOG_INFO("feature-test");
     test1();
     test_threadpool_basic();
     test_threadpool_many_tasks();
     test_threadpool_exception();
+    new_container_test();
     // test3(); // known abort, keep disabled
 }

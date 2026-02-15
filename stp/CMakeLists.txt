@@ -10,6 +10,7 @@ add_library(${PROJECT_NAME} STATIC
     IExecutor.cpp
     ThreadPoolExecutor.hpp
     ThreadPoolExecutor.cpp
+    UnbMpMcTemplateQueue.hpp
 )
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
