@@ -45,6 +45,7 @@ public:
             throw;
         }
     }
+    
     ~ThreadPool() {
         std::cout << "ThreadPool destructor called\n";
         request_stop();
@@ -71,6 +72,7 @@ public:
         }
         return returnFuture;
     }
+
     template <typename F, typename... Args>
     void put_periodic(size_t repeat_time_ms, F&& func, Args&&... args) {
         if (m_currentPeriodicThreadCount >= m_maxPeriodicThreadCount) {
@@ -85,9 +87,14 @@ public:
             std::cerr << "Unknown exception in ThreadPool::put_periodic\n";
         }
     }
+
     void request_stop() {
         m_taskQueue.request_stop();                             // sends stop signal to the queue, will return nullopt on tryTake
         m_stopRequested.store(true, std::memory_order_relaxed); // signal threads to stop
+    }
+
+    size_t getCurrentThreadCount() const {
+        return m_currentThreadCount;
     }
 private:
     void blocking_thread_stopping() {
