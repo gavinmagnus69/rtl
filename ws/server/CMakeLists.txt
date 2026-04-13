@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 
-project(libswsserver)
+project(libsrtlwsserver)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,9 +30,9 @@ PRIVATE ${private_cpp}
 
 target_link_libraries(${PROJECT_NAME} 
 PUBLIC
-  libcoreconfig::libcoreconfig
-  libcorelogger::libcorelogger
-  libmiddlewareauth::libmiddlewareauth
+  libsrtlcoreconfig::libsrtlcoreconfig
+  libsrtlcorelogger::libsrtlcorelogger
+  libsrtlmiddlewareauth::libsrtlmiddlewareauth
   librtlstp::librtlstp
   nlohmann_json::nlohmann_json 
   spdlog::spdlog 
