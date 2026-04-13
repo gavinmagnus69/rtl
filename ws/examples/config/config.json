@@ -1,0 +1,50 @@
+{
+  "database": {
+    "app": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 5432,
+      "dbname": "postgres",
+      "user": "postgres",
+      "password": "postgres",
+      "application_name": "course_work_app",
+      "auto_apply_schema": true,
+      "pool": {
+        "max_connections": 10,
+        "min_connections": 1
+      }
+    },
+    "default": {
+      "ENGINE": "mysql",
+      "NAME": "mydb",
+      "USER": "myuser",
+      "PASSWORD": "",
+      "HOST": "localhost",
+      "PORT": 3306
+    }
+  },
+  "server": {
+    "port": 8080,
+    "request_timeout": 5000
+  },
+  "websocket": {
+    "port": 9090,
+    "max_message_size": 65536,
+    "idle_timeout": 600,
+    "ping_interval": 30,
+    "enable_deflate": true,
+    "auto_ping_pong": true
+  },
+  "emulation": {
+    "device_count": 3
+  },
+  "auth": {
+    "jwt": {
+      "algorithm": "HS256",
+      "issuer": "auth-service",
+      "audience": "server-api",
+      "ttl_seconds": 900,
+      "secret_env": "APP_JWT_SECRET"
+    }
+  }
+}

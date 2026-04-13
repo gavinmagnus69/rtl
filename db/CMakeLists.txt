@@ -1,0 +1,8 @@
+add_subdirectory(core)
+add_subdirectory(pool)
+add_subdirectory(tx)
+# add_subdirectory(mapping)
+# add_subdirectory(obs)
+# add_subdirectory(orm)
+# add_subdirectory(query)
+add_subdirectory(test)
