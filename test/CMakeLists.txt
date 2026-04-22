@@ -1,1 +1,1 @@
-# add_subdirectory(feature-test)
+add_subdirectory(feature-test)

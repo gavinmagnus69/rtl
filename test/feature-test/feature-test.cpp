@@ -1,255 +1,160 @@
+#include <atomic>
+#include <chrono>
 #include <future>
 #include <iostream>
-#include <memory>
-#include <source_location>
+#include <stdexcept>
+#include <string>
 #include <thread>
+#include <vector>
 
-
-#include <BlockAllocator.hpp>
-#include <LinearAllocator.hpp>
 #include <RtlThreadPool.hpp>
-#include <StaticThreadPool.h>
-#include <ThreadPoolExecutor.hpp>
-#include <UnboundedMPMCQueue.h>
 
-#include <UnbMpMcTemplateQueue.hpp>
+namespace {
 
-#include "spdlog/spdlog.h"
+using namespace std::chrono_literals;
 
-void thread_sleep(size_t ms = 10000) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
-
-
-void stp_test() {
-    rtl::stp::StaticThreadPool pool(4);
-    auto futureResult = pool.addTask<int>([]() { return 42; });
-    auto futureResult2 = pool.addTask<std::string>([]() { return std::string("Hello, ThreadPool!"); });
-
-    std::cout << "Waiting for the result..." << std::endl;
-    int result = futureResult.get();
-    std::cout << "The result is: " << result << std::endl;
-
-    std::string result2 = futureResult2.get();
-    std::cout << "The second result is: " << result2 << std::endl;
-
-    pool.joinAll();
-}
-
-
-// void allocator_test() {
-
-//     std::vector<int, rtl::BlockAllocator<int>> vec;
-//     auto newVec = vec;
-//     vec.reserve(100);
-//     vec.push_back(4);
-//     newVec.push_back(12);
-//     for (int i = 0; i < 20; i++) {
-//         vec.push_back(i);
-//         std::cout << i << " vec[i]" << vec[i] << '\n';
-//         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//     }
-//     newVec.push_back(12);
-
-//     // vec.push_back(4);
-//     // vec.push_back(4);
-//     // vec.push_back(4);
-//     // vec.push_back(4);
-// }
-
-
-template <typename F, typename... Args>
-auto invokeTest(F func, Args... args) -> std::invoke_result<F, Args...>::type {
-    try {
-        if (std::is_invocable_v<F, Args...> == false) {
-            throw std::invalid_argument("Function is not invocable with the given arguments.");
-        }
-        auto result = std::invoke(std::forward<F>(func), std::forward<Args>(args)...);
-        return std::move(result);
-    } catch (const std::exception& exp) {
-        std::cerr << exp.what() << '\n';
+void require(bool condition, const char* message) {
+    if (!condition) {
+        throw std::runtime_error(message);
     }
-}
-
-
-template <typename F, typename... Args>
-auto enqueue(F func, Args... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
-    using ReturnType = typename std::invoke_result<F, Args...>::type; // this return type of the function
-    auto tasking = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(std::forward<F>(func), std::forward<Args>(args)...));
-    auto returnFuture = tasking->get_future();
-    auto closure = [tasking]() mutable {
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        (*tasking)();
-    };
-    std::cout << "Starting thread...\n";
-    std::thread thread(std::move(closure));
-    thread.detach();
-    return returnFuture;
-}
-
-
-int sum(int a, int b) {
-    SPDLOG_INFO("Calculating sum of {} and {}\n", a, b);
-    return a + b;
-}
-
-// working correctly
-void test1() {
-    SPDLOG_INFO("Enqueuing task...\n");
-    rtl::stp::ThreadPool thp(2, 4);
-    thp.put_periodic(500, std::move(sum), 5, 2);
-    auto futureResult = thp.put(sum, 5, 7);
-    SPDLOG_INFO("Doing other work in main thread...\n");
-    int result = futureResult.get();
-    SPDLOG_INFO("The sum is: {}\n", result);
-    SPDLOG_INFO("Main thread sleeping for 10 seconds to allow periodic tasks to run...\n");
-    // std::this_thread::sleep_for(std::chrono::seconds(10));
-    thread_sleep();
-    SPDLOG_INFO("Main thread slept\n");
-}
-
-
-void test2() {
-    SPDLOG_INFO("{} {}\n", std::source_location::current().function_name(), std::source_location::current().file_name());
 }
 
 void test_threadpool_basic() {
-    SPDLOG_INFO("ThreadPool basic test\n");
     rtl::stp::ThreadPool tp(2, 4);
-    auto f1 = tp.put(sum, 1, 2);
+    auto f1 = tp.put([](int a, int b) { return a + b; }, 1, 2);
     auto f2 = tp.put([]() { return std::string("ok"); });
 
-    const int res1 = f1.get();
-    const std::string res2 = f2.get();
-
-    if (res1 != 3) {
-        SPDLOG_ERROR("Expected 3, got {}\n", res1);
-    }
-    if (res2 != "ok") {
-        SPDLOG_ERROR("Expected ok, got {}\n", res2);
-    }
+    require(f1.get() == 3, "basic one-shot task returned unexpected result");
+    require(f2.get() == "ok", "basic string task returned unexpected result");
 }
 
 void test_threadpool_many_tasks() {
-    SPDLOG_INFO("ThreadPool many tasks test\n");
     rtl::stp::ThreadPool tp(4, 8);
-    constexpr int taskCount = 100;
+    constexpr int task_count = 128;
     std::atomic<int> counter{0};
     std::vector<std::future<void>> futures;
-    futures.reserve(taskCount);
+    futures.reserve(task_count);
 
-    for (int i = 0; i < taskCount; ++i) {
-        futures.emplace_back(tp.put([&counter]() { counter.fetch_add(1, std::memory_order_relaxed); }));
+    for (int i = 0; i < task_count; ++i) {
+        futures.emplace_back(tp.put([&counter]() {
+            counter.fetch_add(1, std::memory_order_relaxed);
+        }));
     }
 
-    for (auto& f : futures) {
-        f.get();
+    for (auto& future : futures) {
+        future.get();
     }
 
-    if (counter.load(std::memory_order_relaxed) != taskCount) {
-        SPDLOG_ERROR("Expected {} tasks, got {}\n", taskCount, counter.load(std::memory_order_relaxed));
-    }
+    require(counter.load(std::memory_order_relaxed) == task_count,
+            "not all enqueued tasks completed");
 }
 
-void test_threadpool_exception() {
-    SPDLOG_INFO("ThreadPool exception test\n");
+void test_threadpool_exception_propagation() {
     rtl::stp::ThreadPool tp(2, 4);
-    auto f = tp.put([]() -> int { throw std::runtime_error("boom"); });
+    auto future = tp.put([]() -> int {
+        throw std::runtime_error("boom");
+    });
 
+    bool caught = false;
     try {
-        (void)f.get();
-        SPDLOG_ERROR("Expected exception, got none\n");
-    } catch (const std::exception& exp) {
-        SPDLOG_INFO("Caught expected exception: {}\n", exp.what());
+        (void)future.get();
+    } catch (const std::runtime_error& exp) {
+        caught = std::string(exp.what()) == "boom";
     }
+
+    require(caught, "task exception was not propagated through future");
 }
 
-// abort() called, unknown issue
-void test3() {
+void test_threadpool_destructor_drains_accepted_tasks() {
+    std::vector<std::future<int>> futures;
+    futures.reserve(16);
+
+    {
+        rtl::stp::ThreadPool tp(2, 4);
+        for (int i = 0; i < 16; ++i) {
+            futures.emplace_back(tp.put([i]() {
+                std::this_thread::sleep_for(5ms);
+                return i;
+            }));
+        }
+    }
+
+    int sum = 0;
+    for (auto& future : futures) {
+        require(future.wait_for(0ms) == std::future_status::ready,
+                "accepted task was not completed before destructor returned");
+        sum += future.get();
+    }
+
+    require(sum == 120, "destructor-drain test observed wrong task results");
+}
+
+void test_threadpool_rejects_put_after_stop() {
+    rtl::stp::ThreadPool tp(2, 4);
+    tp.request_stop();
+
+    bool threw = false;
     try {
-        using namespace rtl::stp;
-        auto tp = rtl::stp::makeThreadPoolExecutor();
-        if (!tp) {
-            SPDLOG_ERROR("nullptr");
-            return;
-        }
-        TaskOptions opt{true, 500};
-        auto ans = tp->submit(opt, sum, 5, 7);
-        thread_sleep(5000);
-        SPDLOG_INFO("thread finish\n");
-        // ans.get();
-        thread_sleep(500);
-        SPDLOG_INFO("thread finish\n");
-    } catch (const std::exception& exp) {
-        SPDLOG_ERROR(exp.what());
+        (void)tp.put([]() { return 7; });
+    } catch (const std::runtime_error&) {
+        threw = true;
     }
+
+    require(threw, "put should reject once shutdown starts");
 }
 
-void new_container_test() {
-    using Type = int;
-    const std::vector<Type> input_data{3, 7, 1, 9, 4};
+void test_threadpool_rejects_periodic_after_stop() {
+    rtl::stp::ThreadPool tp(2, 4, 2);
+    tp.request_stop();
 
-    rtl::stp::UnbMpMcTemplateQueue<Type> fifo_queue;
-    using PriorityContainer = std::priority_queue<Type>;
-    rtl::stp::UnbMpMcTemplateQueue<Type, PriorityContainer> priority_queue;
-
-    SPDLOG_INFO("new_container_test: push {} items into FIFO and priority queues", input_data.size());
-    for (const auto value : input_data) {
-        fifo_queue.put(value);
-        priority_queue.put(value);
-        SPDLOG_INFO("new_container_test input -> {}", value);
-    }
-
-    SPDLOG_INFO("new_container_test: FIFO output");
-    while (!fifo_queue.empty()) {
-        auto value_opt = fifo_queue.tryTake(1);
-        if (!value_opt.has_value()) {
-            continue;
-        }
-        SPDLOG_INFO("fifo <- {}", value_opt.value());
-    }
-
-    SPDLOG_INFO("new_container_test: priority output");
-    while (!priority_queue.empty()) {
-        auto value_opt = priority_queue.tryTake(1);
-        if (!value_opt.has_value()) {
-            continue;
-        }
-        SPDLOG_INFO("priority <- {}", value_opt.value());
-    }
-
-    using MoveOnlyType = std::unique_ptr<int>;
-    struct PtrLess {
-        bool operator()(const MoveOnlyType& left, const MoveOnlyType& right) const {
-            return *left < *right;
-        }
-    };
-    using MoveOnlyPriorityContainer = rtl::stp::MovablePriorityQueue<MoveOnlyType, PtrLess>;
-    rtl::stp::UnbMpMcTemplateQueue<MoveOnlyType, MoveOnlyPriorityContainer> move_only_priority_queue;
-
-    SPDLOG_INFO("new_container_test: move-only priority output");
-    move_only_priority_queue.put(std::make_unique<int>(3));
-    move_only_priority_queue.put(std::make_unique<int>(10));
-    move_only_priority_queue.put(std::make_unique<int>(6));
-
-    while (!move_only_priority_queue.empty()) {
-        auto value_opt = move_only_priority_queue.tryTake(1);
-        if (!value_opt.has_value()) {
-            continue;
-        }
-        SPDLOG_INFO("move-only priority <- {}", *value_opt.value());
-    }
+    const bool accepted = tp.put_periodic(10, []() {});
+    require(!accepted, "periodic task should reject once shutdown starts");
 }
 
+void test_threadpool_periodic_stops_after_request_stop() {
+    rtl::stp::ThreadPool tp(2, 4, 2);
+    std::atomic<int> counter{0};
+
+    const bool accepted = tp.put_periodic(10, [&counter]() {
+        counter.fetch_add(1, std::memory_order_relaxed);
+    });
+    require(accepted, "periodic task should be accepted while pool is running");
+
+    std::this_thread::sleep_for(60ms);
+    tp.request_stop();
+    const int before_wait = counter.load(std::memory_order_relaxed);
+    std::this_thread::sleep_for(40ms);
+    const int after_wait = counter.load(std::memory_order_relaxed);
+
+    require(after_wait == before_wait,
+            "periodic task continued running after shutdown");
+}
+
+void run_test(void (*test)(), const char* name) {
+    test();
+    std::cout << "[PASS] " << name << '\n';
+}
+
+} // namespace
 
 int main() {
-    new_container_test();
+    try {
+        run_test(test_threadpool_basic, "threadpool_basic");
+        run_test(test_threadpool_many_tasks, "threadpool_many_tasks");
+        run_test(test_threadpool_exception_propagation,
+                 "threadpool_exception_propagation");
+        run_test(test_threadpool_destructor_drains_accepted_tasks,
+                 "threadpool_destructor_drains_accepted_tasks");
+        run_test(test_threadpool_rejects_put_after_stop,
+                 "threadpool_rejects_put_after_stop");
+        run_test(test_threadpool_rejects_periodic_after_stop,
+                 "threadpool_rejects_periodic_after_stop");
+        run_test(test_threadpool_periodic_stops_after_request_stop,
+                 "threadpool_periodic_stops_after_request_stop");
+    } catch (const std::exception& exp) {
+        std::cerr << "[FAIL] " << exp.what() << '\n';
+        return 1;
+    }
+
     return 0;
-    SPDLOG_INFO("feature-test");
-    test1();
-    test_threadpool_basic();
-    test_threadpool_many_tasks();
-    test_threadpool_exception();
-    new_container_test();
-    // test3(); // known abort, keep disabled
 }
