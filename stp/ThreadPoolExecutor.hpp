@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <exception>
-#include <iostream>
 #include <memory>
 
 
@@ -41,8 +40,7 @@ protected:
       }
       m_threadPool->put(std::move(task));
       return true;
-    } catch (const std::exception &exp) {
-      std::cerr << exp.what() << '\n';
+    } catch (...) {
       return false;
     };
   }
