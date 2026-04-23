@@ -13,148 +13,149 @@ namespace {
 
 using namespace std::chrono_literals;
 
-void require(bool condition, const char* message) {
-    if (!condition) {
-        throw std::runtime_error(message);
-    }
+void require(bool condition, const char *message) {
+  if (!condition) {
+    throw std::runtime_error(message);
+  }
 }
 
 void test_threadpool_basic() {
-    rtl::stp::ThreadPool tp(2, 4);
-    auto f1 = tp.put([](int a, int b) { return a + b; }, 1, 2);
-    auto f2 = tp.put([]() { return std::string("ok"); });
+  rtl::stp::ThreadPool tp(2, 4);
+  auto f1 = tp.put([](int a, int b) { return a + b; }, 1, 2);
+  auto f2 = tp.put([]() { return std::string("ok"); });
 
-    require(f1.get() == 3, "basic one-shot task returned unexpected result");
-    require(f2.get() == "ok", "basic string task returned unexpected result");
+  require(f1.get() == 3, "basic one-shot task returned unexpected result");
+  require(f2.get() == "ok", "basic string task returned unexpected result");
 }
 
 void test_threadpool_many_tasks() {
-    rtl::stp::ThreadPool tp(4, 8);
-    constexpr int task_count = 128;
-    std::atomic<int> counter{0};
-    std::vector<std::future<void>> futures;
-    futures.reserve(task_count);
+  rtl::stp::ThreadPool tp(4, 8);
+  constexpr int task_count = 128;
+  std::atomic<int> counter{0};
+  std::vector<std::future<void>> futures;
+  futures.reserve(task_count);
 
-    for (int i = 0; i < task_count; ++i) {
-        futures.emplace_back(tp.put([&counter]() {
-            counter.fetch_add(1, std::memory_order_relaxed);
-        }));
-    }
+  for (int i = 0; i < task_count; ++i) {
+    futures.emplace_back(tp.put(
+        [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); }));
+  }
 
-    for (auto& future : futures) {
-        future.get();
-    }
+  for (auto &future : futures) {
+    future.get();
+  }
 
-    require(counter.load(std::memory_order_relaxed) == task_count,
-            "not all enqueued tasks completed");
+  require(counter.load(std::memory_order_relaxed) == task_count,
+          "not all enqueued tasks completed");
 }
 
 void test_threadpool_exception_propagation() {
-    rtl::stp::ThreadPool tp(2, 4);
-    auto future = tp.put([]() -> int {
-        throw std::runtime_error("boom");
-    });
+  rtl::stp::ThreadPool tp(2, 4);
+  auto future = tp.put([]() -> int { throw std::runtime_error("boom"); });
 
-    bool caught = false;
-    try {
-        (void)future.get();
-    } catch (const std::runtime_error& exp) {
-        caught = std::string(exp.what()) == "boom";
-    }
+  bool caught = false;
+  try {
+    (void)future.get();
+  } catch (const std::runtime_error &exp) {
+    caught = std::string(exp.what()) == "boom";
+  }
 
-    require(caught, "task exception was not propagated through future");
+  require(caught, "task exception was not propagated through future");
 }
 
 void test_threadpool_destructor_drains_accepted_tasks() {
-    std::vector<std::future<int>> futures;
-    futures.reserve(16);
+  std::vector<std::future<int>> futures;
+  futures.reserve(16);
 
-    {
-        rtl::stp::ThreadPool tp(2, 4);
-        for (int i = 0; i < 16; ++i) {
-            futures.emplace_back(tp.put([i]() {
-                std::this_thread::sleep_for(5ms);
-                return i;
-            }));
-        }
+  {
+    rtl::stp::ThreadPool tp(2, 4);
+    for (int i = 0; i < 16; ++i) {
+      futures.emplace_back(tp.put([i]() {
+        std::this_thread::sleep_for(5ms);
+        return i;
+      }));
     }
+  }
 
-    int sum = 0;
-    for (auto& future : futures) {
-        require(future.wait_for(0ms) == std::future_status::ready,
-                "accepted task was not completed before destructor returned");
-        sum += future.get();
-    }
+  int sum = 0;
+  for (auto &future : futures) {
+    require(future.wait_for(0ms) == std::future_status::ready,
+            "accepted task was not completed before destructor returned");
+    sum += future.get();
+  }
 
-    require(sum == 120, "destructor-drain test observed wrong task results");
+  require(sum == 120, "destructor-drain test observed wrong task results");
 }
 
 void test_threadpool_rejects_put_after_stop() {
-    rtl::stp::ThreadPool tp(2, 4);
-    tp.request_stop();
+  rtl::stp::ThreadPool tp(2, 4);
+  tp.request_stop();
 
-    bool threw = false;
-    try {
-        (void)tp.put([]() { return 7; });
-    } catch (const std::runtime_error&) {
-        threw = true;
-    }
+  bool threw = false;
+  try {
+    (void)tp.put([]() { return 7; });
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
 
-    require(threw, "put should reject once shutdown starts");
+  require(threw, "put should reject once shutdown starts");
 }
 
 void test_threadpool_rejects_periodic_after_stop() {
-    rtl::stp::ThreadPool tp(2, 4, 2);
-    tp.request_stop();
+  rtl::stp::ThreadPool tp(2, 4, 2);
+  tp.request_stop();
 
-    const bool accepted = tp.put_periodic(10, []() {});
-    require(!accepted, "periodic task should reject once shutdown starts");
+  bool threw = false;
+  try {
+    tp.put_periodic(10, []() {});
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+
+  require(threw, "periodic task should reject once shutdown starts");
 }
 
 void test_threadpool_periodic_stops_after_request_stop() {
-    rtl::stp::ThreadPool tp(2, 4, 2);
-    std::atomic<int> counter{0};
+  rtl::stp::ThreadPool tp(2, 4, 2);
+  std::atomic<int> counter{0};
 
-    const bool accepted = tp.put_periodic(10, [&counter]() {
-        counter.fetch_add(1, std::memory_order_relaxed);
-    });
-    require(accepted, "periodic task should be accepted while pool is running");
+  tp.put_periodic(
+      10, [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); });
 
-    std::this_thread::sleep_for(60ms);
-    tp.request_stop();
-    const int before_wait = counter.load(std::memory_order_relaxed);
-    std::this_thread::sleep_for(40ms);
-    const int after_wait = counter.load(std::memory_order_relaxed);
+  std::this_thread::sleep_for(60ms);
+  tp.request_stop();
+  const int before_wait = counter.load(std::memory_order_relaxed);
+  std::this_thread::sleep_for(40ms);
+  const int after_wait = counter.load(std::memory_order_relaxed);
 
-    require(after_wait == before_wait,
-            "periodic task continued running after shutdown");
+  require(after_wait == before_wait,
+          "periodic task continued running after shutdown");
 }
 
-void run_test(void (*test)(), const char* name) {
-    test();
-    std::cout << "[PASS] " << name << '\n';
+void run_test(void (*test)(), const char *name) {
+  test();
+  std::cout << "[PASS] " << name << '\n';
 }
 
 } // namespace
 
 int main() {
-    try {
-        run_test(test_threadpool_basic, "threadpool_basic");
-        run_test(test_threadpool_many_tasks, "threadpool_many_tasks");
-        run_test(test_threadpool_exception_propagation,
-                 "threadpool_exception_propagation");
-        run_test(test_threadpool_destructor_drains_accepted_tasks,
-                 "threadpool_destructor_drains_accepted_tasks");
-        run_test(test_threadpool_rejects_put_after_stop,
-                 "threadpool_rejects_put_after_stop");
-        run_test(test_threadpool_rejects_periodic_after_stop,
-                 "threadpool_rejects_periodic_after_stop");
-        run_test(test_threadpool_periodic_stops_after_request_stop,
-                 "threadpool_periodic_stops_after_request_stop");
-    } catch (const std::exception& exp) {
-        std::cerr << "[FAIL] " << exp.what() << '\n';
-        return 1;
-    }
+  try {
+    run_test(test_threadpool_basic, "threadpool_basic");
+    run_test(test_threadpool_many_tasks, "threadpool_many_tasks");
+    run_test(test_threadpool_exception_propagation,
+             "threadpool_exception_propagation");
+    run_test(test_threadpool_destructor_drains_accepted_tasks,
+             "threadpool_destructor_drains_accepted_tasks");
+    run_test(test_threadpool_rejects_put_after_stop,
+             "threadpool_rejects_put_after_stop");
+    run_test(test_threadpool_rejects_periodic_after_stop,
+             "threadpool_rejects_periodic_after_stop");
+    run_test(test_threadpool_periodic_stops_after_request_stop,
+             "threadpool_periodic_stops_after_request_stop");
+  } catch (const std::exception &exp) {
+    std::cerr << "[FAIL] " << exp.what() << '\n';
+    return 1;
+  }
 
-    return 0;
+  return 0;
 }

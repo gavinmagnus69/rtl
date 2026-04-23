@@ -53,6 +53,7 @@ public:
   };
 
 public:
+  //   throws exceptions
   template <typename F, typename... Args>
   auto put(F &&func, Args &&...args)
       -> std::future<typename std::invoke_result<F, Args...>::type> {
@@ -84,30 +85,34 @@ public:
 
     return returnFuture;
   };
-
+  //   throws exceptions
   template <typename F, typename... Args>
-  bool put_periodic(size_t repeat_time_ms, F &&func, Args &&...args) {
+  void put_periodic(size_t repeat_time_ms, F &&func, Args &&...args) {
     {
       std::unique_lock<std::mutex> lock(m_mtx);
       if (m_poolState.load() != PoolState::running) {
-        //   throw std::runtime_error{"TP is stopping or stopped"};
-        return false;
+        throw std::runtime_error{"TP is stopping or stopped"};
+        // return false;
       };
 
       try {
-        return add_periodic_thread(
-            repeat_time_ms,
-            std::bind(std::forward<F>(func),
-                      std::forward<Args>(args)...)); // copy of task?
+        if (add_periodic_thread(repeat_time_ms,
+                                std::bind(std::forward<F>(func),
+                                          std::forward<Args>(args)...))) {
+          // success case
+          return;
+        }; // copy of task?
+        throw std::runtime_error{"Failed to add periodic thread"};
       } catch (const std::exception &exp) {
         std::cerr << exp.what() << '\n';
-        return false;
+        // return false;
+        throw;
       } catch (...) {
         std::cerr << "Unknown exception in ThreadPool::put_periodic\n";
-        return false;
+        throw;
       }
     }
-    return false;
+    throw std::runtime_error{"Exception in put_periodic"};
   };
 
   void request_stop() {
