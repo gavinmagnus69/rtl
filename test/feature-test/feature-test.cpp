@@ -7,11 +7,20 @@
 #include <thread>
 #include <vector>
 
+#include <IExecutor.hpp>
 #include <RtlThreadPool.hpp>
+#include <ThreadPoolExecutor.hpp>
 
 namespace {
 
 using namespace std::chrono_literals;
+
+class RejectingExecutor final : public rtl::stp::IExecutor {
+protected:
+  bool post(rtl::stp::Task &&, rtl::stp::TaskOptions) override {
+    return false;
+  }
+};
 
 void require(bool condition, const char *message) {
   if (!condition) {
@@ -131,6 +140,71 @@ void test_threadpool_periodic_stops_after_request_stop() {
           "periodic task continued running after shutdown");
 }
 
+void test_executor_one_shot_submit_success() {
+  auto executor = rtl::stp::makeThreadPoolExecutor(2, 4);
+  require(static_cast<bool>(executor), "makeThreadPoolExecutor returned nullptr");
+
+  rtl::stp::TaskOptions options{.is_periodic = false,
+                                .periodic_interval_ms = 0};
+  auto future = executor->submit(options, [](int a, int b) { return a + b; },
+                                 10, 32);
+
+  require(future.get() == 42, "executor one-shot submit returned wrong result");
+}
+
+void test_executor_one_shot_rejection_future() {
+  RejectingExecutor executor;
+  rtl::stp::TaskOptions options{.is_periodic = false,
+                                .periodic_interval_ms = 0};
+  auto future = executor.submit(options, []() { return 7; });
+
+  bool caught = false;
+  try {
+    (void)future.get();
+  } catch (const std::runtime_error &exp) {
+    caught = std::string(exp.what()) == "submit rejected by executor";
+  }
+
+  require(caught, "executor one-shot rejection was not surfaced by future");
+}
+
+void test_executor_periodic_submit_success_returns_invalid_future() {
+  auto executor = rtl::stp::makeThreadPoolExecutor(2, 4);
+  require(static_cast<bool>(executor), "makeThreadPoolExecutor returned nullptr");
+
+  std::atomic<int> counter{0};
+  rtl::stp::TaskOptions options{.is_periodic = true,
+                                .periodic_interval_ms = 10};
+  auto future = executor->submit(options, [&counter]() {
+    counter.fetch_add(1, std::memory_order_relaxed);
+  });
+
+  require(!future.valid(),
+          "accepted periodic submit should return invalid fire-and-forget future");
+  std::this_thread::sleep_for(40ms);
+  require(counter.load(std::memory_order_relaxed) > 0,
+          "accepted periodic submit did not execute task");
+}
+
+void test_executor_periodic_rejection_future() {
+  RejectingExecutor executor;
+  rtl::stp::TaskOptions options{.is_periodic = true,
+                                .periodic_interval_ms = 10};
+  auto future = executor.submit(options, []() {});
+
+  require(future.valid(),
+          "rejected periodic submit should return a future carrying rejection");
+
+  bool caught = false;
+  try {
+    future.get();
+  } catch (const std::runtime_error &exp) {
+    caught = std::string(exp.what()) == "submit rejected by executor";
+  }
+
+  require(caught, "executor periodic rejection was not surfaced by future");
+}
+
 void run_test(void (*test)(), const char *name) {
   test();
   std::cout << "[PASS] " << name << '\n';
@@ -152,6 +226,14 @@ int main() {
              "threadpool_rejects_periodic_after_stop");
     run_test(test_threadpool_periodic_stops_after_request_stop,
              "threadpool_periodic_stops_after_request_stop");
+    run_test(test_executor_one_shot_submit_success,
+             "executor_one_shot_submit_success");
+    run_test(test_executor_one_shot_rejection_future,
+             "executor_one_shot_rejection_future");
+    run_test(test_executor_periodic_submit_success_returns_invalid_future,
+             "executor_periodic_submit_success_returns_invalid_future");
+    run_test(test_executor_periodic_rejection_future,
+             "executor_periodic_rejection_future");
   } catch (const std::exception &exp) {
     std::cerr << "[FAIL] " << exp.what() << '\n';
     return 1;

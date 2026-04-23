@@ -1,51 +1,58 @@
 #pragma once
 
 #include <cassert>
+#include <exception>
+#include <iostream>
 #include <memory>
 
 
 #include "IExecutor.hpp"
 #include "RtlThreadPool.hpp"
 
-
 namespace rtl {
 namespace stp {
 
-
 struct ThreadPoolExecutor final : public IExecutor {
 public:
-    virtual ~ThreadPoolExecutor() override {
+  virtual ~ThreadPoolExecutor() override {
 
-        // assert(false && "TODO");
-        //  RAII threadPool destruction
-    }
-    ThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) {
-        m_threadPool = std::make_unique<ThreadPool>(current_threads, max_threads, max_threads);
-        // assert(false && "TODO");
-    }
+    // assert(false && "TODO");
+    //  RAII threadPool destruction
+  }
+  ThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) {
+    m_threadPool =
+        std::make_unique<ThreadPool>(current_threads, max_threads, max_threads);
+    // assert(false && "TODO");
+  }
+
 protected:
-    virtual bool post(Task&& task, TaskOptions opt) final {
-        if (!m_threadPool) {
-            return false;
-        }
-        if (!task) {
-            return false;
-        }
-        if (opt.is_periodic) {
-            // periodic case
-            m_threadPool->put_periodic(opt.periodic_interval_ms, std::move(task));
-            return true;
-        }
-        m_threadPool->put(std::move(task));
-        return true;
+  virtual bool post(Task &&task, TaskOptions opt) final {
+    if (!m_threadPool) {
+      return false;
     }
+    if (!task) {
+      return false;
+    }
+    try {
+      if (opt.is_periodic) {
+        // periodic case
+        m_threadPool->put_periodic(opt.periodic_interval_ms, std::move(task));
+        return true;
+      }
+      m_threadPool->put(std::move(task));
+      return true;
+    } catch (const std::exception &exp) {
+      std::cerr << exp.what() << '\n';
+      return false;
+    };
+  }
+
 private:
-    std::unique_ptr<ThreadPool> m_threadPool;
+  std::unique_ptr<ThreadPool> m_threadPool;
 };
 
-
-auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) -> std::unique_ptr<IExecutor>;
-
+auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20)
+    -> std::unique_ptr<IExecutor>;
 
 }; // namespace stp
 }; // namespace rtl
