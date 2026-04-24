@@ -156,6 +156,9 @@ public:
     if (m_state.load() != ContainerState::open) {
       return false;
     }
+    if (Ops::size(m_buffer) + 1 > m_maxQueueSize && m_maxQueueSize != 0) {
+      return false;
+    }
     Ops::push(m_buffer, std::forward<U>(task));
     m_notEmptyQueue.notify_one();
     return true;
@@ -226,6 +229,11 @@ public:
     m_notEmptyQueue.notify_all();
   }
 
+  void set_queue_max_size(size_t max_queue_size) {
+    std::lock_guard lock(m_mutex);
+    m_maxQueueSize = max_queue_size;
+  };
+
 private:
   enum class ContainerState : uint8_t { open, closing };
 
@@ -237,6 +245,7 @@ private:
   std::atomic<ContainerState> m_state{ContainerState::open};
   mutable std::mutex m_mutex;
   std::condition_variable m_notEmptyQueue;
+  size_t m_maxQueueSize{0}; // 0 == unbounded
   Container m_buffer;
 };
 

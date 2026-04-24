@@ -161,8 +161,8 @@ void test_executor_one_shot_rejection_future() {
   bool caught = false;
   try {
     (void)future.get();
-  } catch (const std::runtime_error &exp) {
-    caught = std::string(exp.what()) == "submit rejected by executor";
+  } catch (const rtl::stp::TaskRejected &exp) {
+    caught = exp.code() == rtl::stp::ErrorCode::task_rejected;
   }
 
   require(caught, "executor one-shot rejection was not surfaced by future");
@@ -198,8 +198,8 @@ void test_executor_periodic_rejection_future() {
   bool caught = false;
   try {
     future.get();
-  } catch (const std::runtime_error &exp) {
-    caught = std::string(exp.what()) == "submit rejected by executor";
+  } catch (const rtl::stp::TaskRejected &exp) {
+    caught = exp.code() == rtl::stp::ErrorCode::task_rejected;
   }
 
   require(caught, "executor periodic rejection was not surfaced by future");

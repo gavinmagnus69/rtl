@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -32,7 +33,7 @@ enum class ShutdownPolicy { graceful, immediate };
 struct ThreadPoolOptions {
   size_t workers_count{6};
   size_t max_workers{20};
-  size_t periodic_workers_count{0};
+  //   size_t periodic_workers_count{0};
   size_t max_periodic_tasks{10};
   size_t max_queue_size{0}; // 0 == unbounded
   RejectionPolicy rejection_policy{RejectionPolicy::throw_exception};
@@ -44,6 +45,18 @@ using Task = std::function<void()>;
 
 class ThreadPool {
 public:
+  enum class PoolState : uint8_t { running, stopping, stopped };
+
+  struct ThreadPoolStats {
+    PoolState state{PoolState::running};
+    size_t workers_count{0};
+    size_t max_workers{0};
+    size_t periodic_workers_count{0};
+    size_t max_periodic_tasks{0};
+    size_t queued_tasks{0};
+    size_t max_queue_size{0};
+  };
+
   ThreadPool(size_t current_threads = 6, size_t max_threads = 20,
              size_t max_periodic_threads = 10) {
     m_opt = ThreadPoolOptions{.workers_count = current_threads,
@@ -82,7 +95,8 @@ public:
       auto closureTask = [tasking]() mutable { (*tasking)(); };
       bool put_result = m_taskQueue.put(std::move(closureTask));
       if (!put_result) {
-        throw std::runtime_error{"Queue is closed"};
+        // also can be rejected, if queue is overflowed
+        throw TaskRejected{};
       }
       return returnFuture;
     } catch (...) {
@@ -97,7 +111,7 @@ public:
     {
       std::unique_lock<std::mutex> lock(m_mtx);
       if (m_poolState.load() != PoolState::running) {
-        throw std::runtime_error{"TP is stopping or stopped"};
+        throw ThreadPoolStopped{};
         // return false;
       };
 
@@ -108,12 +122,12 @@ public:
           // success case
           return;
         }; // copy of task?
-        throw std::runtime_error{"Failed to add periodic thread"};
+        throw TaskRejected{};
       } catch (...) {
         throw;
       }
     }
-    throw std::runtime_error{"Exception in put_periodic"};
+    throw TaskRejected{};
   };
 
   void request_stop() {
@@ -124,11 +138,46 @@ public:
     // task and continue work unless its empty
   };
 
-  size_t getCurrentThreadCount() const { return m_opt.workers_count; }
+  [[nodiscard]] size_t getCurrentThreadCount() const {
+    return m_opt.workers_count;
+  }
+
+  [[nodiscard]] PoolState state() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mtx);
+    return m_poolState;
+  };
+
+  [[nodiscard]] bool is_running() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mtx);
+    return m_poolState == PoolState::running;
+  };
+
+  [[nodiscard]] bool is_stopping() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mtx);
+    return m_poolState == PoolState::stopping;
+  };
+
+  [[nodiscard]] bool is_stopped() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mtx);
+    return m_poolState == PoolState::stopped;
+  };
+
+  [[nodiscard]] ThreadPoolStats stats() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mtx);
+    ThreadPoolStats stats = m_stats;
+    stats.max_periodic_tasks = m_opt.max_periodic_tasks;
+    stats.workers_count = m_opt.workers_count;
+    stats.max_workers = m_opt.max_workers;
+    stats.max_queue_size = m_opt.max_queue_size;
+    stats.queued_tasks = m_taskQueue.size();
+    stats.state = m_poolState;
+    return m_stats;
+  };
 
 private:
   void setup_threads() {
-    m_opt.workers_count = std::max((size_t)1, m_opt.max_workers);
+    m_taskQueue.set_queue_max_size(m_opt.max_queue_size);
+    m_opt.workers_count = std::max((size_t)1, m_opt.workers_count);
     m_opt.max_workers = std::max(m_opt.max_workers, m_opt.workers_count);
     m_opt.max_periodic_tasks = std::max((size_t)1, m_opt.max_periodic_tasks);
     try {
@@ -142,6 +191,7 @@ private:
     }
   };
 
+  //   terminating, if owning thread is stopping itself
   void blocking_thread_stopping() {
     auto caller_thread_id = std::this_thread::get_id();
     for (size_t i = 0; i < m_periodicWorkers.size(); ++i) {
@@ -187,9 +237,9 @@ private:
     });
   };
 
-  bool add_periodic_thread(size_t task_interval_ms, Task &&task) {
+  [[nodiscard]] bool add_periodic_thread(size_t task_interval_ms, Task &&task) {
 
-    if (m_opt.periodic_workers_count >= m_opt.max_periodic_tasks) {
+    if (m_stats.periodic_workers_count >= m_opt.max_periodic_tasks) {
       return false;
     }
     if (!task) {
@@ -218,13 +268,11 @@ private:
             t();
           }
         });
-    ++m_opt.periodic_workers_count;
+    ++m_stats.periodic_workers_count;
     // m_currentPeriodicThreadCount.fetch_add(1);
 
     return true;
   };
-
-  enum class PoolState : uint8_t { running, stopping, stopped };
 
   UnbMpMcTemplateQueue<Task> m_taskQueue{}; // add container variation
   std::condition_variable m_cv;
@@ -232,6 +280,7 @@ private:
   std::vector<std::thread> m_activeWorkers{};
   std::vector<std::thread> m_periodicWorkers{};
   ThreadPoolOptions m_opt{};
+  ThreadPoolStats m_stats;
   std::atomic<PoolState> m_poolState{PoolState::running};
   //   std::atomic<size_t> m_currentThreadCount{0};
   //   size_t m_maxThreadCount{0};

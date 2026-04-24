@@ -4,7 +4,6 @@
 #include <exception>
 #include <memory>
 
-
 #include "IExecutor.hpp"
 #include "RtlThreadPool.hpp"
 
@@ -18,6 +17,11 @@ public:
     // assert(false && "TODO");
     //  RAII threadPool destruction
   }
+
+  explicit ThreadPoolExecutor(const ThreadPoolOptions &opt) {
+    m_threadPool = std::make_unique<ThreadPool>(opt);
+  };
+
   ThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) {
     m_threadPool =
         std::make_unique<ThreadPool>(current_threads, max_threads, max_threads);
@@ -48,6 +52,9 @@ protected:
 private:
   std::unique_ptr<ThreadPool> m_threadPool;
 };
+
+auto makeThreadPoolExecutor(const ThreadPoolOptions &opt)
+    -> std::unique_ptr<IExecutor>;
 
 auto makeThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20)
     -> std::unique_ptr<IExecutor>;

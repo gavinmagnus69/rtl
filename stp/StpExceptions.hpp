@@ -27,7 +27,7 @@ private:
 
 class ThreadPoolStopped : public ThreadPoolError {
 public:
-  ThreadPoolStopped()
+  explicit ThreadPoolStopped()
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::pool_stopped,
                                   "Thread pool is stopped") {};
 
@@ -37,15 +37,40 @@ public:
 
 class TaskRejected : public ThreadPoolError {
 public:
-  TaskRejected(std::string_view message)
+  explicit TaskRejected()
+      : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::task_rejected,
+                                  "Task rejected") {};
+  explicit TaskRejected(std::string_view message)
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::task_rejected, message) {
   }
 };
 
 class QueueClosed : public ThreadPoolError {
 public:
-  QueueClosed(std::string_view message)
+  explicit QueueClosed()
+      : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::queue_closed,
+                                  "Queue is closed") {}
+  explicit QueueClosed(std::string_view message)
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::queue_closed, message) {}
+};
+
+class QueueFull : public ThreadPoolError {
+public:
+  explicit QueueFull()
+      : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::queue_full,
+                                  "Queue is full") {}
+  explicit QueueFull(std::string_view message)
+      : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::queue_full, message) {}
+};
+
+class InvalidPoolOptions : public ThreadPoolError {
+public:
+  explicit InvalidPoolOptions()
+      : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::invalid_pool_options,
+                                  "Invalid pool options") {}
+  explicit InvalidPoolOptions(std::string_view message)
+      : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::invalid_pool_options,
+                                  message) {}
 };
 
 }; // namespace rtl::stp

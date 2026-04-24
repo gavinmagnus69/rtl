@@ -4,6 +4,8 @@
 #include <future>
 #include <stdexcept>
 
+#include "StpExceptions.hpp"
+
 namespace rtl {
 namespace stp {
 
@@ -28,8 +30,7 @@ struct IExecutor {
                            opt);
       if (!postFlag) {
         std::promise<ReturnType> p;
-        p.set_exception(std::make_exception_ptr(
-            std::runtime_error("submit rejected by executor")));
+        p.set_exception(std::make_exception_ptr(TaskRejected{}));
         return p.get_future();
       };
       return std::future<ReturnType>{};
@@ -44,8 +45,7 @@ struct IExecutor {
               opt)) {
       // failed to put task into executor
       std::promise<ReturnType> p;
-      p.set_exception(std::make_exception_ptr(
-          std::runtime_error("submit rejected by executor")));
+      p.set_exception(std::make_exception_ptr(TaskRejected{}));
       return p.get_future();
     }
     return returnFuture;
