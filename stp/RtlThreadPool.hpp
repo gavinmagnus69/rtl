@@ -22,7 +22,7 @@ namespace stp {
 
 enum class RejectionPolicy { throw_exception, block, block_for, caller_runs };
 
-enum class ShutdownPolicy { graceful, immediate };
+// enum class ShutdownPolicy { graceful, immediate };
 
 struct ThreadPoolOptions {
   size_t workers_count{6};
@@ -66,10 +66,7 @@ public:
     setup_threads();
   };
 
-  ~ThreadPool() {
-    request_stop();
-    blocking_thread_stopping();
-  };
+  ~ThreadPool() { join(); };
 
 public:
   //   throws exceptions
@@ -160,12 +157,29 @@ public:
     throw TaskRejected{};
   };
 
-  void request_stop() {
+  // compatibility wrapper
+  void request_stop() { shutdown_graceful(); };
+
+  void shutdown_graceful() {
     std::unique_lock<std::mutex> lock{m_mtx};
+    if (m_poolState.load() != PoolState::running) {
+      return;
+    }
     m_poolState.store(PoolState::stopping);
     m_cv.notify_all();
     m_taskQueue.close(); // sends stop signal to the queue, queue will not new
     // task and continue work unless its empty
+  };
+
+  void join() {
+    shutdown_graceful();
+    {
+      std::unique_lock<std::mutex> lock{m_joinMtx};
+      if (m_poolState.load() == PoolState::stopped) {
+        return;
+      }
+      blocking_thread_stopping();
+    }
   };
 
   [[nodiscard]] size_t getCurrentThreadCount() const {
@@ -217,6 +231,7 @@ private:
         add_thread();
       }
     } catch (...) {
+      join();
       throw;
     }
   };
@@ -295,7 +310,14 @@ private:
             if (m_poolState.load() != PoolState::running) {
               return;
             }
-            t();
+            try {
+              if (!t) {
+                return;
+              }
+              t();
+            } catch (...) {
+              continue;
+            };
           }
         });
     ++m_stats.periodic_workers_count;
@@ -307,6 +329,7 @@ private:
   QueueType m_taskQueue{}; // add container variation
   std::condition_variable m_cv;
   mutable std::mutex m_mtx;
+  mutable std::mutex m_joinMtx;
   std::vector<std::thread> m_activeWorkers{};
   std::vector<std::thread> m_periodicWorkers{};
   ThreadPoolOptions m_opt{};

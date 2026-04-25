@@ -140,6 +140,81 @@ void test_threadpool_periodic_stops_after_request_stop() {
           "periodic task continued running after shutdown");
 }
 
+void test_threadpool_shutdown_graceful_is_idempotent() {
+  rtl::stp::ThreadPool tp(2, 4);
+
+  tp.shutdown_graceful();
+  tp.shutdown_graceful();
+
+  require(tp.is_stopping(), "shutdown_graceful should leave pool stopping");
+
+  bool threw = false;
+  try {
+    (void)tp.put([]() {});
+  } catch (const rtl::stp::ThreadPoolStopped &exp) {
+    threw = exp.code() == rtl::stp::ErrorCode::pool_stopped;
+  }
+
+  require(threw, "shutdown_graceful should reject new tasks");
+}
+
+void test_threadpool_join_is_idempotent() {
+  rtl::stp::ThreadPool tp(2, 4);
+
+  tp.join();
+  tp.join();
+
+  require(tp.is_stopped(), "join should leave pool stopped");
+}
+
+void test_threadpool_join_after_shutdown_drains_accepted_tasks() {
+  rtl::stp::ThreadPool tp(2, 4);
+  std::vector<std::future<int>> futures;
+  futures.reserve(8);
+
+  for (int i = 0; i < 8; ++i) {
+    futures.emplace_back(tp.put([i]() {
+      std::this_thread::sleep_for(5ms);
+      return i;
+    }));
+  }
+
+  tp.shutdown_graceful();
+  tp.join();
+
+  int sum = 0;
+  for (auto &future : futures) {
+    require(future.wait_for(0ms) == std::future_status::ready,
+            "join did not drain an accepted task");
+    sum += future.get();
+  }
+
+  require(sum == 28, "join-drain test observed wrong task results");
+  require(tp.is_stopped(), "join after shutdown should leave pool stopped");
+}
+
+void test_threadpool_periodic_exception_does_not_stop_worker() {
+  rtl::stp::ThreadPool tp(2, 4, 1);
+  std::atomic<int> attempts{0};
+  std::atomic<int> successes{0};
+
+  tp.put_periodic(10, [&attempts, &successes]() {
+    const int attempt = attempts.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (attempt == 1) {
+      throw std::runtime_error("periodic failure");
+    }
+    successes.fetch_add(1, std::memory_order_relaxed);
+  });
+
+  std::this_thread::sleep_for(80ms);
+  tp.join();
+
+  require(attempts.load(std::memory_order_relaxed) >= 2,
+          "periodic worker stopped after task exception");
+  require(successes.load(std::memory_order_relaxed) > 0,
+          "periodic worker did not continue after task exception");
+}
+
 void test_threadpool_bounded_throw_rejects_when_full() {
   rtl::stp::ThreadPoolOptions options{.workers_count = 1,
                                       .max_workers = 1,
@@ -422,6 +497,14 @@ int main() {
              "threadpool_rejects_periodic_after_stop");
     run_test(test_threadpool_periodic_stops_after_request_stop,
              "threadpool_periodic_stops_after_request_stop");
+    run_test(test_threadpool_shutdown_graceful_is_idempotent,
+             "threadpool_shutdown_graceful_is_idempotent");
+    run_test(test_threadpool_join_is_idempotent,
+             "threadpool_join_is_idempotent");
+    run_test(test_threadpool_join_after_shutdown_drains_accepted_tasks,
+             "threadpool_join_after_shutdown_drains_accepted_tasks");
+    run_test(test_threadpool_periodic_exception_does_not_stop_worker,
+             "threadpool_periodic_exception_does_not_stop_worker");
     run_test(test_threadpool_bounded_throw_rejects_when_full,
              "threadpool_bounded_throw_rejects_when_full");
     run_test(test_threadpool_block_policy_waits_for_capacity,

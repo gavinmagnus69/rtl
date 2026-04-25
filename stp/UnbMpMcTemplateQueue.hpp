@@ -287,8 +287,10 @@ public:
   }
 
   void close() {
+    std::unique_lock<std::mutex> lock{m_mutex};
     m_state.store(ContainerState::closing);
     // m_stopRequested.store(true, std::memory_order_relaxed);
+    lock.unlock();
     m_notEmptyQueue.notify_all();
     m_notFull.notify_all();
   }
