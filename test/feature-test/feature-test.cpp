@@ -140,6 +140,202 @@ void test_threadpool_periodic_stops_after_request_stop() {
           "periodic task continued running after shutdown");
 }
 
+void test_threadpool_bounded_throw_rejects_when_full() {
+  rtl::stp::ThreadPoolOptions options{.workers_count = 1,
+                                      .max_workers = 1,
+                                      .max_periodic_tasks = 1,
+                                      .max_queue_size = 1,
+                                      .rejection_policy =
+                                          rtl::stp::RejectionPolicy::
+                                              throw_exception,
+                                      .enqueue_timeout_ms = 0};
+  rtl::stp::ThreadPool tp(options);
+
+  std::promise<void> worker_started;
+  std::promise<void> release_worker;
+  auto release = release_worker.get_future().share();
+
+  auto running = tp.put([&worker_started, release]() {
+    worker_started.set_value();
+    release.wait();
+  });
+  worker_started.get_future().wait();
+  auto queued = tp.put([]() {});
+
+  bool caught = false;
+  try {
+    (void)tp.put([]() {});
+  } catch (const rtl::stp::QueueFull &exp) {
+    caught = exp.code() == rtl::stp::ErrorCode::queue_full;
+  }
+
+  release_worker.set_value();
+  running.get();
+  queued.get();
+
+  require(caught, "throw_exception policy should reject when queue is full");
+}
+
+void test_threadpool_block_policy_waits_for_capacity() {
+  rtl::stp::ThreadPoolOptions options{
+      .workers_count = 1,
+      .max_workers = 1,
+      .max_periodic_tasks = 1,
+      .max_queue_size = 1,
+      .rejection_policy = rtl::stp::RejectionPolicy::block,
+      .enqueue_timeout_ms = 0};
+  rtl::stp::ThreadPool tp(options);
+
+  std::promise<void> worker_started;
+  std::promise<void> release_worker;
+  auto release = release_worker.get_future().share();
+
+  auto running = tp.put([&worker_started, release]() {
+    worker_started.set_value();
+    release.wait();
+  });
+  worker_started.get_future().wait();
+  auto queued = tp.put([]() {});
+
+  auto producer = std::async(std::launch::async, [&tp]() {
+    auto future = tp.put([]() { return 9; });
+    return future.get();
+  });
+
+  const bool producer_waited =
+      producer.wait_for(20ms) == std::future_status::timeout;
+
+  release_worker.set_value();
+  running.get();
+  queued.get();
+
+  require(producer_waited,
+          "block policy submitter should wait while queue is full");
+  require(producer.get() == 9,
+          "block policy submitter did not resume after capacity was freed");
+}
+
+void test_threadpool_block_for_times_out_when_full() {
+  rtl::stp::ThreadPoolOptions options{
+      .workers_count = 1,
+      .max_workers = 1,
+      .max_periodic_tasks = 1,
+      .max_queue_size = 1,
+      .rejection_policy = rtl::stp::RejectionPolicy::block_for,
+      .enqueue_timeout_ms = 20};
+  rtl::stp::ThreadPool tp(options);
+
+  std::promise<void> worker_started;
+  std::promise<void> release_worker;
+  auto release = release_worker.get_future().share();
+
+  auto running = tp.put([&worker_started, release]() {
+    worker_started.set_value();
+    release.wait();
+  });
+  worker_started.get_future().wait();
+  auto queued = tp.put([]() {});
+
+  bool caught = false;
+  try {
+    (void)tp.put([]() {});
+  } catch (const rtl::stp::TaskRejected &exp) {
+    caught = exp.code() == rtl::stp::ErrorCode::task_rejected;
+  }
+
+  release_worker.set_value();
+  running.get();
+  queued.get();
+
+  require(caught, "block_for policy should reject after enqueue timeout");
+}
+
+void test_threadpool_block_policy_wakes_on_stop() {
+  rtl::stp::ThreadPoolOptions options{
+      .workers_count = 1,
+      .max_workers = 1,
+      .max_periodic_tasks = 1,
+      .max_queue_size = 1,
+      .rejection_policy = rtl::stp::RejectionPolicy::block,
+      .enqueue_timeout_ms = 0};
+  rtl::stp::ThreadPool tp(options);
+
+  std::promise<void> worker_started;
+  std::promise<void> release_worker;
+  auto release = release_worker.get_future().share();
+
+  auto running = tp.put([&worker_started, release]() {
+    worker_started.set_value();
+    release.wait();
+  });
+  worker_started.get_future().wait();
+  auto queued = tp.put([]() {});
+
+  auto producer = std::async(std::launch::async, [&tp]() {
+    try {
+      (void)tp.put([]() {});
+    } catch (const rtl::stp::ThreadPoolStopped &exp) {
+      return exp.code() == rtl::stp::ErrorCode::pool_stopped;
+    }
+    return false;
+  });
+
+  const bool producer_waited =
+      producer.wait_for(20ms) == std::future_status::timeout;
+
+  tp.request_stop();
+  const bool producer_woke_on_stop = producer.get();
+
+  release_worker.set_value();
+  running.get();
+  queued.get();
+
+  require(producer_waited, "block policy submitter should wait before shutdown");
+  require(producer_woke_on_stop, "shutdown did not wake blocked submitter");
+}
+
+void test_threadpool_caller_runs_when_full() {
+  rtl::stp::ThreadPoolOptions options{
+      .workers_count = 1,
+      .max_workers = 1,
+      .max_periodic_tasks = 1,
+      .max_queue_size = 1,
+      .rejection_policy = rtl::stp::RejectionPolicy::caller_runs,
+      .enqueue_timeout_ms = 0};
+  rtl::stp::ThreadPool tp(options);
+
+  std::promise<void> worker_started;
+  std::promise<void> release_worker;
+  auto release = release_worker.get_future().share();
+  const auto caller_thread_id = std::this_thread::get_id();
+  std::thread::id executed_thread_id{};
+
+  auto running = tp.put([&worker_started, release]() {
+    worker_started.set_value();
+    release.wait();
+  });
+  worker_started.get_future().wait();
+  auto queued = tp.put([]() {});
+
+  auto inline_future = tp.put([&executed_thread_id]() {
+    executed_thread_id = std::this_thread::get_id();
+    return 42;
+  });
+
+  const bool inline_ready =
+      inline_future.wait_for(0ms) == std::future_status::ready;
+
+  release_worker.set_value();
+  running.get();
+  queued.get();
+
+  require(inline_ready, "caller_runs should return an already-ready future");
+  require(inline_future.get() == 42,
+          "caller_runs returned an unexpected task result");
+  require(executed_thread_id == caller_thread_id,
+          "caller_runs did not execute on submitting thread");
+}
+
 void test_executor_one_shot_submit_success() {
   auto executor = rtl::stp::makeThreadPoolExecutor(2, 4);
   require(static_cast<bool>(executor), "makeThreadPoolExecutor returned nullptr");
@@ -226,6 +422,16 @@ int main() {
              "threadpool_rejects_periodic_after_stop");
     run_test(test_threadpool_periodic_stops_after_request_stop,
              "threadpool_periodic_stops_after_request_stop");
+    run_test(test_threadpool_bounded_throw_rejects_when_full,
+             "threadpool_bounded_throw_rejects_when_full");
+    run_test(test_threadpool_block_policy_waits_for_capacity,
+             "threadpool_block_policy_waits_for_capacity");
+    run_test(test_threadpool_block_for_times_out_when_full,
+             "threadpool_block_for_times_out_when_full");
+    run_test(test_threadpool_block_policy_wakes_on_stop,
+             "threadpool_block_policy_wakes_on_stop");
+    run_test(test_threadpool_caller_runs_when_full,
+             "threadpool_caller_runs_when_full");
     run_test(test_executor_one_shot_submit_success,
              "executor_one_shot_submit_success");
     run_test(test_executor_one_shot_rejection_future,

@@ -20,24 +20,18 @@
 namespace rtl {
 namespace stp {
 
-enum class RejectionPolicy {
-  throw_exception,
-  return_false,
-  block,
-  block_for,
-  caller_runs
-};
+enum class RejectionPolicy { throw_exception, block, block_for, caller_runs };
 
 enum class ShutdownPolicy { graceful, immediate };
 
 struct ThreadPoolOptions {
   size_t workers_count{6};
   size_t max_workers{20};
-  //   size_t periodic_workers_count{0};
   size_t max_periodic_tasks{10};
   size_t max_queue_size{0}; // 0 == unbounded
+  // commented for now, todo later
   RejectionPolicy rejection_policy{RejectionPolicy::throw_exception};
-  ShutdownPolicy shutdown_policy{ShutdownPolicy::graceful};
+  // ShutdownPolicy shutdown_policy{ShutdownPolicy::graceful};
   size_t enqueue_timeout_ms{0}; // for block_for rejection_policy
 };
 
@@ -45,6 +39,8 @@ using Task = std::function<void()>;
 
 class ThreadPool {
 public:
+  using QueueType = UnbMpMcTemplateQueue<Task>;
+
   enum class PoolState : uint8_t { running, stopping, stopped };
 
   struct ThreadPoolStats {
@@ -93,12 +89,46 @@ public:
     auto returnFuture = tasking->get_future();
     try {
       auto closureTask = [tasking]() mutable { (*tasking)(); };
-      bool put_result = m_taskQueue.put(std::move(closureTask));
-      if (!put_result) {
-        // also can be rejected, if queue is overflowed
-        throw TaskRejected{};
+      QueueType::PutResultErrorCode put_erc{
+          QueueType::PutResultErrorCode::accepted};
+      switch (m_opt.rejection_policy) {
+      case RejectionPolicy::throw_exception:
+        put_erc = m_taskQueue.put(std::move(closureTask));
+        break;
+      case RejectionPolicy::block:
+        put_erc = m_taskQueue.put_wait(std::move(closureTask));
+        break;
+      case RejectionPolicy::block_for:
+        put_erc = m_taskQueue.put_wait_for(std::move(closureTask),
+                                           m_opt.enqueue_timeout_ms);
+        break;
+      case RejectionPolicy::caller_runs:
+        put_erc = m_taskQueue.put(closureTask); // passing copy
+        if (put_erc == QueueType::PutResultErrorCode::accepted) {
+          return returnFuture;
+        }
+        if (put_erc == QueueType::PutResultErrorCode::closed) {
+          throw ThreadPoolStopped{};
+        }
+        if (put_erc == QueueType::PutResultErrorCode::full) {
+          closureTask();
+          return returnFuture;
+        }
+        break;
+      };
+      if (put_erc == QueueType::PutResultErrorCode::accepted) {
+        return returnFuture;
       }
-      return returnFuture;
+      if (put_erc == QueueType::PutResultErrorCode::closed) {
+        throw ThreadPoolStopped{};
+      }
+      if (put_erc == QueueType::PutResultErrorCode::full) {
+        throw QueueFull{};
+      }
+      if (put_erc == QueueType::PutResultErrorCode::timeout) {
+        throw TaskRejected{"Rejected on timeout"};
+      }
+
     } catch (...) {
       throw;
     }
@@ -171,7 +201,7 @@ public:
     stats.max_queue_size = m_opt.max_queue_size;
     stats.queued_tasks = m_taskQueue.size();
     stats.state = m_poolState;
-    return m_stats;
+    return stats;
   };
 
 private:
@@ -274,7 +304,7 @@ private:
     return true;
   };
 
-  UnbMpMcTemplateQueue<Task> m_taskQueue{}; // add container variation
+  QueueType m_taskQueue{}; // add container variation
   std::condition_variable m_cv;
   mutable std::mutex m_mtx;
   std::vector<std::thread> m_activeWorkers{};

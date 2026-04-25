@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <exception>
 #include <list>
 #include <optional>
 #include <queue>
@@ -150,24 +153,78 @@ template <class T, class Container = std::deque<T>> class UnbMpMcTemplateQueue {
 public:
   using Ops = ContainerOps<Container>;
 
+  enum class PutResultErrorCode : uint8_t { accepted, closed, full, timeout };
+
   // Thread-safe puts and pushes.
-  template <typename U> bool put(U &&task) {
+  template <typename U> PutResultErrorCode put(U &&task) {
     std::lock_guard lock(m_mutex);
     if (m_state.load() != ContainerState::open) {
-      return false;
+      return PutResultErrorCode::closed;
     }
     if (Ops::size(m_buffer) + 1 > m_maxQueueSize && m_maxQueueSize != 0) {
-      return false;
+      return PutResultErrorCode::full;
     }
     Ops::push(m_buffer, std::forward<U>(task));
     m_notEmptyQueue.notify_one();
-    return true;
+    return PutResultErrorCode::accepted;
+  }
+
+  // unlimited waiting until notification
+  template <typename U> PutResultErrorCode put_wait(U &&task) {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_state.load() != ContainerState::open) {
+      return PutResultErrorCode::closed;
+    }
+    // checking if it fits in max_queue_size
+    while (Ops::size(m_buffer) + 1 > m_maxQueueSize && m_maxQueueSize != 0) {
+      if (m_state.load() == ContainerState::closing) {
+        return PutResultErrorCode::closed;
+      }
+      m_notFull.wait(lock, [this]() {
+        return m_state.load() == ContainerState::closing ||
+               (Ops::size(m_buffer) < m_maxQueueSize);
+      });
+      if (m_state.load() == ContainerState::closing) {
+        return PutResultErrorCode::closed;
+      }
+    }
+    Ops::push(m_buffer, std::forward<U>(task));
+    m_notEmptyQueue.notify_one();
+    return PutResultErrorCode::accepted;
+  }
+
+  template <typename U> PutResultErrorCode put_wait_for(U &&task, size_t ms) {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_state.load() != ContainerState::open) {
+      return PutResultErrorCode::closed;
+    }
+    auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (Ops::size(m_buffer) + 1 > m_maxQueueSize && m_maxQueueSize != 0) {
+      if (m_state.load() == ContainerState::closing) {
+        return PutResultErrorCode::closed;
+      }
+      bool wait_result = m_notFull.wait_until(lock, deadline, [this]() {
+        return m_state.load() == ContainerState::closing ||
+               (Ops::size(m_buffer) < m_maxQueueSize);
+      });
+      if (!wait_result) {
+        return PutResultErrorCode::timeout;
+      }
+      if (m_state.load() == ContainerState::closing) {
+        return PutResultErrorCode::closed;
+      }
+    }
+    Ops::push(m_buffer, std::forward<U>(task));
+    m_notEmptyQueue.notify_one();
+    return PutResultErrorCode::accepted;
   }
 
   // Thread-safe takes and pops. Blocks if empty.
   // use tryTake instead to avoid blocking
   [[deprecated("Use tryTake instead")]]
   T take() {
+    // std::terminate();
     std::unique_lock lock(m_mutex);
     while (Ops::empty(m_buffer)) {
       m_notEmptyQueue.wait(lock); // unlocks
@@ -182,9 +239,12 @@ public:
     if (time_out_ms == 0) {
       duration = std::chrono::milliseconds::max(); // wait indefinitely
     }
-    std::unique_lock lock(m_mutex);
+    std::unique_lock<std::mutex> lock(m_mutex);
     if (!Ops::empty(m_buffer)) {
-      return TakeResult<T>{.result = std::move(takeLocked())};
+      TakeResult<T> result{.result = std::move(takeLocked())};
+      lock.unlock();
+      m_notFull.notify_one();
+      return result;
     }
     while (Ops::empty(m_buffer)) {
       if (!m_notEmptyQueue.wait_for(lock, duration, [this] {
@@ -205,7 +265,10 @@ public:
     //   return TakeResult<T>{.erc = TakeResultErrorCode::closed};
     // }
     // have item and no timeout
-    return TakeResult<T>{.result = std::move(takeLocked())};
+    TakeResult<T> result{.result = std::move(takeLocked())};
+    lock.unlock();
+    m_notFull.notify_one();
+    return result;
   }
 
   bool empty() const {
@@ -227,6 +290,7 @@ public:
     m_state.store(ContainerState::closing);
     // m_stopRequested.store(true, std::memory_order_relaxed);
     m_notEmptyQueue.notify_all();
+    m_notFull.notify_all();
   }
 
   void set_queue_max_size(size_t max_queue_size) {
@@ -245,6 +309,7 @@ private:
   std::atomic<ContainerState> m_state{ContainerState::open};
   mutable std::mutex m_mutex;
   std::condition_variable m_notEmptyQueue;
+  std::condition_variable m_notFull;
   size_t m_maxQueueSize{0}; // 0 == unbounded
   Container m_buffer;
 };
