@@ -97,7 +97,7 @@ void test_threadpool_destructor_drains_accepted_tasks() {
 
 void test_threadpool_rejects_put_after_stop() {
   rtl::stp::ThreadPool tp(2, 4);
-  tp.request_stop();
+  tp.shutdown_graceful();
 
   bool threw = false;
   try {
@@ -111,7 +111,7 @@ void test_threadpool_rejects_put_after_stop() {
 
 void test_threadpool_rejects_periodic_after_stop() {
   rtl::stp::ThreadPool tp(2, 4, 2);
-  tp.request_stop();
+  tp.shutdown_graceful();
 
   bool threw = false;
   try {
@@ -123,7 +123,7 @@ void test_threadpool_rejects_periodic_after_stop() {
   require(threw, "periodic task should reject once shutdown starts");
 }
 
-void test_threadpool_periodic_stops_after_request_stop() {
+void test_threadpool_periodic_stops_after_shutdown_graceful() {
   rtl::stp::ThreadPool tp(2, 4, 2);
   std::atomic<int> counter{0};
 
@@ -131,7 +131,7 @@ void test_threadpool_periodic_stops_after_request_stop() {
       10, [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); });
 
   std::this_thread::sleep_for(60ms);
-  tp.request_stop();
+  tp.shutdown_graceful();
   const int before_wait = counter.load(std::memory_order_relaxed);
   std::this_thread::sleep_for(40ms);
   const int after_wait = counter.load(std::memory_order_relaxed);
@@ -358,7 +358,7 @@ void test_threadpool_block_policy_wakes_on_stop() {
   const bool producer_waited =
       producer.wait_for(20ms) == std::future_status::timeout;
 
-  tp.request_stop();
+  tp.shutdown_graceful();
   const bool producer_woke_on_stop = producer.get();
 
   release_worker.set_value();
@@ -495,8 +495,8 @@ int main() {
              "threadpool_rejects_put_after_stop");
     run_test(test_threadpool_rejects_periodic_after_stop,
              "threadpool_rejects_periodic_after_stop");
-    run_test(test_threadpool_periodic_stops_after_request_stop,
-             "threadpool_periodic_stops_after_request_stop");
+    run_test(test_threadpool_periodic_stops_after_shutdown_graceful,
+             "threadpool_periodic_stops_after_shutdown_graceful");
     run_test(test_threadpool_shutdown_graceful_is_idempotent,
              "threadpool_shutdown_graceful_is_idempotent");
     run_test(test_threadpool_join_is_idempotent,

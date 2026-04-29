@@ -16,22 +16,17 @@
 #include "StpExceptions.hpp"
 #include "UnbMpMcTemplateQueue.hpp"
 
-// TODO: add periodic task, shutdown mechanism, dynamic thread adding/removing
 namespace rtl {
 namespace stp {
 
 enum class RejectionPolicy { throw_exception, block, block_for, caller_runs };
-
-// enum class ShutdownPolicy { graceful, immediate };
 
 struct ThreadPoolOptions {
   size_t workers_count{6};
   size_t max_workers{20};
   size_t max_periodic_tasks{10};
   size_t max_queue_size{0}; // 0 == unbounded
-  // commented for now, todo later
   RejectionPolicy rejection_policy{RejectionPolicy::throw_exception};
-  // ShutdownPolicy shutdown_policy{ShutdownPolicy::graceful};
   size_t enqueue_timeout_ms{0}; // for block_for rejection_policy
 };
 
@@ -47,7 +42,7 @@ public:
     PoolState state{PoolState::running};
     size_t workers_count{0};
     size_t max_workers{0};
-    size_t periodic_workers_count{0};
+    size_t periodic_workers_count{0}; // created periodic workers
     size_t max_periodic_tasks{0};
     size_t queued_tasks{0};
     size_t max_queue_size{0};
@@ -66,17 +61,21 @@ public:
     setup_threads();
   };
 
-  ~ThreadPool() { join(); };
+  ~ThreadPool() {
+    try {
+      join();
+    } catch (...) {
+    };
+  };
 
 public:
   //   throws exceptions
   template <typename F, typename... Args>
-  auto put(F &&func, Args &&...args)
+  [[nodiscard]] auto put(F &&func, Args &&...args)
       -> std::future<typename std::invoke_result<F, Args...>::type> {
 
     if (m_poolState.load() != PoolState::running) {
       throw ThreadPoolStopped{};
-      //   throw std::runtime_error{"TP is stopping or stopped"};
     };
     using ReturnType =
         typename std::invoke_result<F, Args...>::type; // this return type of
@@ -139,16 +138,14 @@ public:
       std::unique_lock<std::mutex> lock(m_mtx);
       if (m_poolState.load() != PoolState::running) {
         throw ThreadPoolStopped{};
-        // return false;
       };
 
       try {
         if (add_periodic_thread(repeat_time_ms,
                                 std::bind(std::forward<F>(func),
                                           std::forward<Args>(args)...))) {
-          // success case
           return;
-        }; // copy of task?
+        };
         throw TaskRejected{};
       } catch (...) {
         throw;
@@ -157,9 +154,13 @@ public:
     throw TaskRejected{};
   };
 
-  // compatibility wrapper
-  void request_stop() { shutdown_graceful(); };
+  [[deprecated]]
+  void request_stop() {
+    shutdown_graceful();
+  };
 
+  // stops accepting new tasks, wakes blocked submitters/periodic workers, and
+  // drains already accepted queued tasks
   void shutdown_graceful() {
     std::unique_lock<std::mutex> lock{m_mtx};
     if (m_poolState.load() != PoolState::running) {
@@ -167,10 +168,11 @@ public:
     }
     m_poolState.store(PoolState::stopping);
     m_cv.notify_all();
-    m_taskQueue.close(); // sends stop signal to the queue, queue will not new
-    // task and continue work unless its empty
+    m_taskQueue.close();
   };
 
+  // Calls graceful shutdown, blocks until all workers exit, is idempotent, and
+  // terminates on self-join.
   void join() {
     shutdown_graceful();
     {
@@ -182,7 +184,7 @@ public:
     }
   };
 
-  [[nodiscard]] size_t getCurrentThreadCount() const {
+  [[nodiscard]] size_t get_current_thread_count() const {
     return m_opt.workers_count;
   }
 
@@ -236,7 +238,7 @@ private:
     }
   };
 
-  //   terminating, if owning thread is stopping itself
+  // Terminates if called from a worker owned by this pool.
   void blocking_thread_stopping() {
     auto caller_thread_id = std::this_thread::get_id();
     for (size_t i = 0; i < m_periodicWorkers.size(); ++i) {
@@ -244,7 +246,7 @@ private:
         std::terminate();
       }
       if (m_periodicWorkers[i].joinable()) {
-        m_periodicWorkers[i].join(); // or detach, depending on desired behavior
+        m_periodicWorkers[i].join();
       }
     }
     for (size_t i = 0; i < m_activeWorkers.size(); ++i) {
@@ -252,15 +254,13 @@ private:
         std::terminate();
       }
       if (m_activeWorkers[i].joinable()) {
-        m_activeWorkers[i].join(); // or join, depending on desired behavior
+        m_activeWorkers[i].join();
       }
     }
     m_poolState.store(PoolState::stopped);
-    // m_currentThreadCount = 0;
   };
 
   void add_thread() {
-    // TODO: add thread safely and checking vectors size and capacity
     m_activeWorkers.emplace_back([this]() {
       while (true) {
         auto task = m_taskQueue.tryTake();
@@ -294,7 +294,6 @@ private:
       return false;
     }
 
-    // std::move? task
     m_periodicWorkers.emplace_back(
         [this, t = std::move(task), task_interval_ms]() {
           while (true) {
@@ -321,12 +320,11 @@ private:
           }
         });
     ++m_stats.periodic_workers_count;
-    // m_currentPeriodicThreadCount.fetch_add(1);
 
     return true;
   };
 
-  QueueType m_taskQueue{}; // add container variation
+  QueueType m_taskQueue{};
   std::condition_variable m_cv;
   mutable std::mutex m_mtx;
   mutable std::mutex m_joinMtx;
@@ -335,10 +333,6 @@ private:
   ThreadPoolOptions m_opt{};
   ThreadPoolStats m_stats;
   std::atomic<PoolState> m_poolState{PoolState::running};
-  //   std::atomic<size_t> m_currentThreadCount{0};
-  //   size_t m_maxThreadCount{0};
-  //   std::atomic<size_t> m_currentPeriodicThreadCount{0};
-  //   size_t m_maxPeriodicThreadCount{0};
 };
 
 }; // namespace stp
