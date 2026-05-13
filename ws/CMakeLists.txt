@@ -1,8 +1,8 @@
-set(BUILD_WS_EXAMPLES ON)
-option(BUILD_WS_TESTS "Build websocket tests" ON)
+set(BUILD_WS_EXAMPLES OFF)
+option(BUILD_WS_TESTS "Build websocket tests" OFF)
 
 add_subdirectory(server)
-add_subdirectory(dto)
+# add_subdirectory(dto)
 
 
 if(BUILD_WS_EXAMPLES)

@@ -13,7 +13,7 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
     find_package(nlohmann_json QUIET CONFIG)
 endif()
 
-if(NOT TARGET nlohmann_json::nlohmann_json)
+if(NOT TARGET nlohmann_json::nlohmann_json OR NOT TARGET spdlog::spdlog)
     add_subdirectory(3rdparty)
     message("Case 3")
 endif()
@@ -26,6 +26,9 @@ endif()
 add_subdirectory(stp)
 add_subdirectory(json)
 add_subdirectory(allocators)
+add_subdirectory(core)
+add_subdirectory(middleware)
+# add_subdirectory(ws) #TODO
 # add_subdirectory(collectors)
 
 
@@ -37,10 +40,12 @@ add_library(${PROJECT_NAME} INTERFACE)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
+    # nlohmann_json::nlohmann_json
+    # spdlog::spdlog
     librtlstp::librtlstp
     librtljson::librtljson
     librtlallocators::librtlallocators
-    nlohmann_json::nlohmann_json
+    libsrtlcoreconfig::libsrtlcoreconfig
 
     # librtlprotocol::librtlprotocol
 )

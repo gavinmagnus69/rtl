@@ -1,7 +1,5 @@
 project(librtlallocators)
 
-
-
 add_library(${PROJECT_NAME} INTERFACE)
 
 file(GLOB_RECURSE  hpp_files CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp")
