@@ -1,13 +1,18 @@
 # Roman Test Library
 cmake_minimum_required(VERSION 3.27)
 
+include(cmake/help.cmake)
+
 # librtl::librtl to link
 project(librtl)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-include(cmake/help.cmake)
+
+
 
 # Selection of modules
 option(WITH_TESTS_BUILD "Include High-level tests" ON)
@@ -24,7 +29,7 @@ option(WITH_MIDDLEWARE_BUILD "Include Middleware" ON)
 
 option(WITH_WS_BUILD "Include WebSocket" OFF)
 
-option(WITH_DB_BUILD "Include Database module" OFF)
+option(WITH_DB_BUILD "Include Database module" ON)
 
 option(RTL_FETCH_MISSING_DEPS "Fetch missing dependencies" ON)
 
@@ -70,6 +75,14 @@ if(WITH_MIDDLEWARE_BUILD)
     target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlmiddlewareauth::libsrtlmiddlewareauth
 )
 endif()
+
+
+if(WITH_DB_BUILD)
+    message("Configuring Middleware module")
+    add_subdirectory(db)
+    # target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlmiddlewareauth::libsrtlmiddlewareauth)
+endif()
+
 
 
 if(WITH_TESTS_BUILD)

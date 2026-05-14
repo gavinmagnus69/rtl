@@ -18,36 +18,35 @@ using Task = std::function<void(void)>;
 
 class [[deprecated("Use RtlThreadPool instead")]] StaticThreadPool {
 public:
-  StaticThreadPool(uint16_t);
-  ~StaticThreadPool();
-
+    StaticThreadPool(uint16_t);
+    ~StaticThreadPool();
 public:
-  template <typename T> std::future<T> addTask(std::function<T()> func) {
-    auto taskPtr = std::make_shared<std::packaged_task<T()>>(std::move(func));
-    try {
-      std::future<T> fut = taskPtr->get_future();
-      Task wrappedTask = [taskPtr]() mutable { (*taskPtr)(); };
-      m_taskQueue.put(std::move(wrappedTask));
-      return fut;
-    } catch (...) {
-      // taskPtr->set_exception(std::current_exception());
-      throw std::current_exception();
+    template <typename T>
+    std::future<T> addTask(std::function<T()> func) {
+        auto taskPtr = std::make_shared<std::packaged_task<T()>>(std::move(func));
+        try {
+            std::future<T> fut = taskPtr->get_future();
+            Task wrappedTask = [taskPtr]() mutable { (*taskPtr)(); };
+            m_taskQueue.put(std::move(wrappedTask));
+            return fut;
+        } catch (...) {
+            // taskPtr->set_exception(std::current_exception());
+            throw std::current_exception();
+        }
+        // std::function requires copyable callables, so keep the task behind a
+        // shared_ptr to allow the wrapper to be copied as it moves through the
+        // queue.
     }
-    // std::function requires copyable callables, so keep the task behind a
-    // shared_ptr to allow the wrapper to be copied as it moves through the
-    // queue.
-  }
-  void putTask(Task &&);
-  void joinAll();
-
+    void putTask(Task&&);
+    void joinAll();
 private:
-  void initAll(uint16_t);
-  void runWorker();
-  uint16_t m_threadCount;
-  std::vector<std::thread> m_workers;
-  UnboundedMPMCQueue<Task> m_taskQueue;
-  std::atomic<bool> m_releaseAllWorkers;
-  std::atomic<bool> m_isJoined;
+    void initAll(uint16_t);
+    void runWorker();
+    uint16_t m_threadCount;
+    std::vector<std::thread> m_workers;
+    UnboundedMPMCQueue<Task> m_taskQueue;
+    std::atomic<bool> m_releaseAllWorkers;
+    std::atomic<bool> m_isJoined;
 };
 }; // namespace stp
 }; // namespace rtl

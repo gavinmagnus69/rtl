@@ -33,7 +33,7 @@ struct ThreadPoolOptions {
 using Task = std::function<void()>;
 
 class ThreadPool {
-public:
+  public:
   using QueueType = UnbMpMcTemplateQueue<Task>;
 
   enum class PoolState : uint8_t { running, stopping, stopped };
@@ -48,16 +48,14 @@ public:
     size_t max_queue_size{0};
   };
 
-  ThreadPool(size_t current_threads = 6, size_t max_threads = 20,
-             size_t max_periodic_threads = 10) {
-    m_opt = ThreadPoolOptions{.workers_count = current_threads,
-                              .max_workers = max_threads,
-                              .max_periodic_tasks = max_periodic_threads};
+  ThreadPool(size_t current_threads = 6, size_t max_threads = 20, size_t max_periodic_threads = 10) {
+    m_opt = ThreadPoolOptions{.workers_count = current_threads, .max_workers = max_threads, .max_periodic_tasks = max_periodic_threads};
 
     setup_threads();
   };
 
-  explicit ThreadPool(const ThreadPoolOptions &opt) : m_opt(opt) {
+  explicit ThreadPool(const ThreadPoolOptions& opt)
+      : m_opt(opt) {
     setup_threads();
   };
 
@@ -67,26 +65,21 @@ public:
     } catch (...) {
     };
   };
-
-public:
+  public:
   //   throws exceptions
   template <typename F, typename... Args>
-  [[nodiscard]] auto put(F &&func, Args &&...args)
-      -> std::future<typename std::invoke_result<F, Args...>::type> {
+  [[nodiscard]] auto put(F&& func, Args&&... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
 
     if (m_poolState.load() != PoolState::running) {
       throw ThreadPoolStopped{};
     };
-    using ReturnType =
-        typename std::invoke_result<F, Args...>::type; // this return type of
-                                                       // the function
-    auto tasking = std::make_shared<std::packaged_task<ReturnType()>>(
-        std::bind(std::forward<F>(func), std::forward<Args>(args)...));
+    using ReturnType = typename std::invoke_result<F, Args...>::type; // this return type of
+                                                                      // the function
+    auto tasking = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(std::forward<F>(func), std::forward<Args>(args)...));
     auto returnFuture = tasking->get_future();
     try {
       auto closureTask = [tasking]() mutable { (*tasking)(); };
-      QueueType::PutResultErrorCode put_erc{
-          QueueType::PutResultErrorCode::accepted};
+      QueueType::PutResultErrorCode put_erc{QueueType::PutResultErrorCode::accepted};
       switch (m_opt.rejection_policy) {
       case RejectionPolicy::throw_exception:
         put_erc = m_taskQueue.put(std::move(closureTask));
@@ -95,8 +88,7 @@ public:
         put_erc = m_taskQueue.put_wait(std::move(closureTask));
         break;
       case RejectionPolicy::block_for:
-        put_erc = m_taskQueue.put_wait_for(std::move(closureTask),
-                                           m_opt.enqueue_timeout_ms);
+        put_erc = m_taskQueue.put_wait_for(std::move(closureTask), m_opt.enqueue_timeout_ms);
         break;
       case RejectionPolicy::caller_runs:
         put_erc = m_taskQueue.put(closureTask); // passing copy
@@ -133,7 +125,7 @@ public:
   };
   //   throws exceptions
   template <typename F, typename... Args>
-  void put_periodic(size_t repeat_time_ms, F &&func, Args &&...args) {
+  void put_periodic(size_t repeat_time_ms, F&& func, Args&&... args) {
     {
       std::unique_lock<std::mutex> lock(m_mtx);
       if (m_poolState.load() != PoolState::running) {
@@ -141,9 +133,7 @@ public:
       };
 
       try {
-        if (add_periodic_thread(repeat_time_ms,
-                                std::bind(std::forward<F>(func),
-                                          std::forward<Args>(args)...))) {
+        if (add_periodic_thread(repeat_time_ms, std::bind(std::forward<F>(func), std::forward<Args>(args)...))) {
           return;
         };
         throw TaskRejected{};
@@ -219,8 +209,7 @@ public:
     stats.state = m_poolState;
     return stats;
   };
-
-private:
+  private:
   void setup_threads() {
     m_taskQueue.set_queue_max_size(m_opt.max_queue_size);
     m_opt.workers_count = std::max((size_t)1, m_opt.workers_count);
@@ -282,7 +271,7 @@ private:
     });
   };
 
-  [[nodiscard]] bool add_periodic_thread(size_t task_interval_ms, Task &&task) {
+  [[nodiscard]] bool add_periodic_thread(size_t task_interval_ms, Task&& task) {
 
     if (m_stats.periodic_workers_count >= m_opt.max_periodic_tasks) {
       return false;
@@ -294,31 +283,27 @@ private:
       return false;
     }
 
-    m_periodicWorkers.emplace_back(
-        [this, t = std::move(task), task_interval_ms]() {
-          while (true) {
-            if (m_poolState.load() != PoolState::running) {
-              return;
-            }
-            std::unique_lock<std::mutex> lock{m_mtx};
-            m_cv.wait_for(lock, std::chrono::milliseconds(task_interval_ms),
-                          [this]() -> bool {
-                            return m_poolState.load() == PoolState::stopping;
-                          });
-            lock.unlock();
-            if (m_poolState.load() != PoolState::running) {
-              return;
-            }
-            try {
-              if (!t) {
-                return;
-              }
-              t();
-            } catch (...) {
-              continue;
-            };
+    m_periodicWorkers.emplace_back([this, t = std::move(task), task_interval_ms]() {
+      while (true) {
+        if (m_poolState.load() != PoolState::running) {
+          return;
+        }
+        std::unique_lock<std::mutex> lock{m_mtx};
+        m_cv.wait_for(lock, std::chrono::milliseconds(task_interval_ms), [this]() -> bool { return m_poolState.load() == PoolState::stopping; });
+        lock.unlock();
+        if (m_poolState.load() != PoolState::running) {
+          return;
+        }
+        try {
+          if (!t) {
+            return;
           }
-        });
+          t();
+        } catch (...) {
+          continue;
+        };
+      }
+    });
     ++m_stats.periodic_workers_count;
 
     return true;
