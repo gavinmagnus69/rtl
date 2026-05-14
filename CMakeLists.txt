@@ -7,45 +7,71 @@ project(librtl)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Ensure nlohmann_json target is available before consumers get added.
-if(NOT TARGET nlohmann_json::nlohmann_json)
-    message("Case 1")
-    find_package(nlohmann_json QUIET CONFIG)
-endif()
+include(cmake/help.cmake)
 
-if(NOT TARGET nlohmann_json::nlohmann_json OR NOT TARGET spdlog::spdlog)
-    add_subdirectory(3rdparty)
-    message("Case 3")
-endif()
+# Selection of modules
+option(WITH_TESTS_BUILD "Include High-level tests" ON)
 
-if(NOT TARGET nlohmann_json::nlohmann_json)
-    message(FATAL_ERROR "nlohmann_json::nlohmann_json is required but could not be located or fetched.")
-    message("Case 2")
-endif()
+option(WITH_STP_BUILD "Include STP" ON)
 
-add_subdirectory(stp)
-add_subdirectory(json)
-add_subdirectory(allocators)
-add_subdirectory(core)
-add_subdirectory(middleware)
-# add_subdirectory(ws) #TODO
-# add_subdirectory(collectors)
+option(WITH_JSON_BUILD "Include JSON" ON)
+
+option(WITH_ALLOCATORS_BUILD "Include Allocators" ON)
+
+option(WITH_CORE_BUILD "Include Core" ON)
+
+option(WITH_MIDDLEWARE_BUILD "Include Middleware" ON)
+
+option(WITH_WS_BUILD "Include WebSocket" OFF)
+
+option(WITH_DB_BUILD "Include Database module" OFF)
+
+option(RTL_FETCH_MISSING_DEPS "Fetch missing dependencies" ON)
 
 
-# add_subdirectory(protocol)
-add_subdirectory(test)
 
+add_subdirectory(3rdparty)
 
 add_library(${PROJECT_NAME} INTERFACE)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
-target_link_libraries(${PROJECT_NAME} INTERFACE
-    # nlohmann_json::nlohmann_json
-    # spdlog::spdlog
-    librtlstp::librtlstp
-    librtljson::librtljson
-    librtlallocators::librtlallocators
-    libsrtlcoreconfig::libsrtlcoreconfig
 
-    # librtlprotocol::librtlprotocol
+
+if(WITH_STP_BUILD)
+    message("Configuring STP module")
+    add_subdirectory(stp)
+    target_link_libraries(${PROJECT_NAME} INTERFACE librtlstp::librtlstp)
+endif()
+
+
+if(WITH_JSON_BUILD)
+    message("Configuring Json module")
+    add_subdirectory(json)
+    target_link_libraries(${PROJECT_NAME} INTERFACE librtljson::librtljson)
+endif()
+
+if(WITH_ALLOCATORS_BUILD)
+    message("Configuring Allocators module")
+    add_subdirectory(allocators)
+    target_link_libraries(${PROJECT_NAME} INTERFACE librtlallocators::librtlallocators)
+endif()
+
+if(WITH_CORE_BUILD)
+    message("Configuring Core module")
+    add_subdirectory(core)
+    target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlcoreconfig::libsrtlcoreconfig
 )
+endif()
+
+
+if(WITH_MIDDLEWARE_BUILD)
+    message("Configuring Middleware module")
+    add_subdirectory(middleware)
+    target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlmiddlewareauth::libsrtlmiddlewareauth
+)
+endif()
+
+
+if(WITH_TESTS_BUILD)
+    add_subdirectory(test)
+endif()

@@ -13,15 +13,13 @@ QualifierAlignment: Left
 
 ColumnLimit: 200
 
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
-
 EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: Never
 
-BreakBeforeBraces: Attach 
+BreakBeforeBraces: Attach
 BreakConstructorInitializers: BeforeComma
 BreakInheritanceList: AfterComma
-BreakTemplateDeclarations: Yes
+AlwaysBreakTemplateDeclarations: Yes
 
 AlignAfterOpenBracket: Align
 
