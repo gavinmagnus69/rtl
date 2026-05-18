@@ -77,33 +77,20 @@ class ThreadPool {
                                                                       // the function
     auto tasking = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(std::forward<F>(func), std::forward<Args>(args)...));
     auto returnFuture = tasking->get_future();
-    try {
-      auto closureTask = [tasking]() mutable { (*tasking)(); };
-      QueueType::PutResultErrorCode put_erc{QueueType::PutResultErrorCode::accepted};
-      switch (m_opt.rejection_policy) {
-      case RejectionPolicy::throw_exception:
-        put_erc = m_taskQueue.put(std::move(closureTask));
-        break;
-      case RejectionPolicy::block:
-        put_erc = m_taskQueue.put_wait(std::move(closureTask));
-        break;
-      case RejectionPolicy::block_for:
-        put_erc = m_taskQueue.put_wait_for(std::move(closureTask), m_opt.enqueue_timeout_ms);
-        break;
-      case RejectionPolicy::caller_runs:
-        put_erc = m_taskQueue.put(closureTask); // passing copy
-        if (put_erc == QueueType::PutResultErrorCode::accepted) {
-          return returnFuture;
-        }
-        if (put_erc == QueueType::PutResultErrorCode::closed) {
-          throw ThreadPoolStopped{};
-        }
-        if (put_erc == QueueType::PutResultErrorCode::full) {
-          closureTask();
-          return returnFuture;
-        }
-        break;
-      };
+    auto closureTask = [tasking]() mutable { (*tasking)(); };
+    QueueType::PutResultErrorCode put_erc{QueueType::PutResultErrorCode::accepted};
+    switch (m_opt.rejection_policy) {
+    case RejectionPolicy::throw_exception:
+      put_erc = m_taskQueue.put(std::move(closureTask));
+      break;
+    case RejectionPolicy::block:
+      put_erc = m_taskQueue.put_wait(std::move(closureTask));
+      break;
+    case RejectionPolicy::block_for:
+      put_erc = m_taskQueue.put_wait_for(std::move(closureTask), m_opt.enqueue_timeout_ms);
+      break;
+    case RejectionPolicy::caller_runs:
+      put_erc = m_taskQueue.put(closureTask); // passing copy
       if (put_erc == QueueType::PutResultErrorCode::accepted) {
         return returnFuture;
       }
@@ -111,14 +98,22 @@ class ThreadPool {
         throw ThreadPoolStopped{};
       }
       if (put_erc == QueueType::PutResultErrorCode::full) {
-        throw QueueFull{};
+        closureTask();
+        return returnFuture;
       }
-      if (put_erc == QueueType::PutResultErrorCode::timeout) {
-        throw TaskRejected{"Rejected on timeout"};
-      }
-
-    } catch (...) {
-      throw;
+      break;
+    };
+    if (put_erc == QueueType::PutResultErrorCode::accepted) {
+      return returnFuture;
+    }
+    if (put_erc == QueueType::PutResultErrorCode::closed) {
+      throw ThreadPoolStopped{};
+    }
+    if (put_erc == QueueType::PutResultErrorCode::full) {
+      throw QueueFull{};
+    }
+    if (put_erc == QueueType::PutResultErrorCode::timeout) {
+      throw TaskRejected{"Rejected on timeout"};
     }
 
     return returnFuture;
@@ -132,16 +127,11 @@ class ThreadPool {
         throw ThreadPoolStopped{};
       };
 
-      try {
-        if (add_periodic_thread(repeat_time_ms, std::bind(std::forward<F>(func), std::forward<Args>(args)...))) {
-          return;
-        };
-        throw TaskRejected{};
-      } catch (...) {
-        throw;
-      }
+      if (add_periodic_thread(repeat_time_ms, std::bind(std::forward<F>(func), std::forward<Args>(args)...))) {
+        return;
+      };
+      throw TaskRejected{};
     }
-    throw TaskRejected{};
   };
 
   [[deprecated]]
@@ -172,6 +162,10 @@ class ThreadPool {
       }
       blocking_thread_stopping();
     }
+  };
+
+  [[deprecated]] size_t getCurrentThreadCount() const {
+    return get_current_thread_count();
   };
 
   [[nodiscard]] size_t get_current_thread_count() const {
