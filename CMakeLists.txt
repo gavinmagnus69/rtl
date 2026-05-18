@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 
-
+option(RTL_FETCH_MISSING_DEPS "Fetch missing dependencies" ON)
 
 # Selection of modules
 option(WITH_TESTS_BUILD "Include High-level tests" ON)
@@ -27,11 +27,12 @@ option(WITH_CORE_BUILD "Include Core" ON)
 
 option(WITH_MIDDLEWARE_BUILD "Include Middleware" ON)
 
-option(WITH_WS_BUILD "Include WebSocket" OFF)
-
 option(WITH_DB_BUILD "Include Database module" ON)
 
-option(RTL_FETCH_MISSING_DEPS "Fetch missing dependencies" ON)
+option(WITH_WS_BUILD "Include WebSocket" ON)
+
+
+
 
 
 
@@ -64,7 +65,7 @@ endif()
 if(WITH_CORE_BUILD)
     message("Configuring Core module")
     add_subdirectory(core)
-    target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlcoreconfig::libsrtlcoreconfig
+    target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlcore::libsrtlcore
 )
 endif()
 
@@ -78,11 +79,18 @@ endif()
 
 
 if(WITH_DB_BUILD)
-    message("Configuring Middleware module")
+    message("Configuring Database module")
     add_subdirectory(db)
-    # target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtlmiddlewareauth::libsrtlmiddlewareauth)
+    target_link_libraries(${PROJECT_NAME} INTERFACE  libsrtldb::libsrtldb)
 endif()
 
+
+if(WITH_WS_BUILD)
+    message("Configuring WebSocket module")
+    add_subdirectory(ws)
+    target_link_libraries(${PROJECT_NAME} INTERFACE libsrtlws::libsrtlws)
+
+endif()
 
 
 if(WITH_TESTS_BUILD)

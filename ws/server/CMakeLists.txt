@@ -30,8 +30,7 @@ PRIVATE ${private_cpp}
 
 target_link_libraries(${PROJECT_NAME} 
 PUBLIC
-  libsrtlcoreconfig::libsrtlcoreconfig
-  libsrtlcorelogger::libsrtlcorelogger
+  libsrtlcore::libsrtlcore
   libsrtlmiddlewareauth::libsrtlmiddlewareauth
   librtlstp::librtlstp
   nlohmann_json::nlohmann_json 

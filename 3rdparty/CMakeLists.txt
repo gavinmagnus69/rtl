@@ -21,8 +21,15 @@ if(WITH_JSON_BUILD OR WITH_CORE_BUILD OR WITH_WS_BUILD)
   endif()
 
   if(WITH_WS_BUILD)
-    find_package(Boost REQUIRED)
-    rtl_require_target(Boost::headers "ws module")
+    # find_package(Boost REQUIRED)
+    if(NOT TARGET Boost::beast AND RTL_FETCH_MISSING_DEPS)
+      add_subdirectory(fetch-content/boost)
+    endif()
+    rtl_require_target(Boost::beast "ws module")
+    if(NOT TARGET zlib AND NOT TARGET zlibstatic AND RTL_FETCH_MISSING_DEPS) 
+      add_subdirectory(fetch-content/zlib)
+    endif()
+
   endif()
 
 
