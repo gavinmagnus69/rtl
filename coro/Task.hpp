@@ -16,8 +16,9 @@ class Task {
     std::optional<T> current_value;
     std::exception_ptr exp;
     std::coroutine_handle<> continuation{};
+
     Task get_return_object() {
-      return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
+      return Task{std::coroutine_handle<promise_type>::from_promise(*this)}; // *this is promise_type
     };
 
     std::suspend_always initial_suspend() {
@@ -99,9 +100,9 @@ class Task {
     };
 
     std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) noexcept {
-      //   if (!handle) {
-      //     throw std::runtime_error{"Invalid coroutine"};
-      //   }
+      if (!handle) {
+        return std::noop_coroutine();
+      }
       handle.promise().continuation = continuation;
       return handle;
     };
@@ -118,6 +119,30 @@ class Task {
         throw std::runtime_error{"Empty value"};
       }
       return std::move(*promise.current_value);
+    };
+    explicit Awaiter(Handle input) noexcept
+        : handle(input) {
+    }
+    Awaiter(const Awaiter&) = delete;
+    Awaiter& operator=(const Awaiter&) = delete;
+    Awaiter(Awaiter&& awaiter) noexcept {
+      this->handle = std::move(awaiter.handle);
+      awaiter.handle = nullptr;
+    };
+    Awaiter& operator=(Awaiter&& awaiter) noexcept {
+      if (this != &awaiter) {
+        if (handle) {
+          handle.destroy();
+        }
+        handle = awaiter.handle;
+        awaiter.handle = nullptr;
+      }
+      return *this;
+    }
+    ~Awaiter() {
+      if (handle) {
+        handle.destroy();
+      }
     };
   };
 
@@ -151,8 +176,10 @@ class Task {
   };
 
   Awaiter operator co_await() noexcept {
-    return Awaiter{m_handle};
-  }
+    auto handle = m_handle;
+    m_handle = nullptr;
+    return Awaiter{handle};
+  };
   private:
   Handle m_handle;
 };
@@ -163,6 +190,7 @@ class Task<void> {
   public:
   struct promise_type {
     std::exception_ptr exp;
+    std::coroutine_handle<> continuation{};
 
     Task get_return_object() {
       return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
@@ -172,7 +200,27 @@ class Task<void> {
       return {};
     }
 
-    std::suspend_always final_suspend() noexcept {
+    struct FinalAwaiter {
+      bool await_ready() noexcept {
+        return false;
+      };
+
+      void await_resume() noexcept {};
+
+      std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
+        if (!handle) {
+          return std::noop_coroutine();
+        }
+        auto cont = handle.promise().continuation;
+        if (cont) {
+          return cont;
+        }
+        return std::noop_coroutine();
+      }
+    };
+
+
+    FinalAwaiter final_suspend() noexcept {
       return {};
     };
 
@@ -212,13 +260,62 @@ class Task<void> {
   };
 
   ~Task() {
-    try {
-      if (m_handle) {
-        m_handle.destroy();
-      }
-    } catch (...) {
+    if (m_handle) {
+      m_handle.destroy();
     }
   };
+
+  struct Awaiter {
+    Handle handle;
+
+    bool await_ready() const noexcept {
+      return !handle || handle.done();
+    };
+
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) noexcept {
+      if (!handle) {
+        return std::noop_coroutine();
+      }
+      handle.promise().continuation = continuation;
+      return handle;
+    };
+
+    void await_resume() {
+      if (!handle) {
+        throw std::runtime_error{"Invalid coroutine"};
+      }
+      auto& promise = handle.promise();
+      if (promise.exp) {
+        std::rethrow_exception(promise.exp);
+      }
+      return;
+    };
+    explicit Awaiter(Handle input) noexcept
+        : handle(input) {
+    }
+    Awaiter(const Awaiter&) = delete;
+    Awaiter& operator=(const Awaiter&) = delete;
+    Awaiter(Awaiter&& awaiter) noexcept {
+      this->handle = std::move(awaiter.handle);
+      awaiter.handle = nullptr;
+    };
+    Awaiter& operator=(Awaiter&& awaiter) noexcept {
+      if (this != &awaiter) {
+        if (handle) {
+          handle.destroy();
+        }
+        handle = awaiter.handle;
+        awaiter.handle = nullptr;
+      }
+      return *this;
+    }
+    ~Awaiter() {
+      if (handle) {
+        handle.destroy();
+      }
+    };
+  };
+
 
   void resume() {
     if (!m_handle || m_handle.done()) {
@@ -229,6 +326,27 @@ class Task<void> {
 
   bool done() const {
     return !m_handle || m_handle.done();
+  };
+
+
+  void result() {
+    if (!done()) {
+      throw std::runtime_error{"Coroutine not finished yet"};
+    }
+    if (m_handle == nullptr) {
+      throw std::runtime_error{"Invalid handler"};
+    }
+    auto& promise = m_handle.promise();
+    if (promise.exp) {
+      std::rethrow_exception(promise.exp);
+    };
+  };
+
+
+  Awaiter operator co_await() noexcept {
+    auto handle = m_handle;
+    m_handle = nullptr;
+    return Awaiter{handle};
   };
   private:
   Handle m_handle;
