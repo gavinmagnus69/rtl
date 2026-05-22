@@ -5,6 +5,10 @@ project(libsrtlcoreconfig)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(nlohmann_json CONFIG QUIET)
+find_package(spdlog CONFIG QUIET)
+
+
 add_library(${PROJECT_NAME} STATIC)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
