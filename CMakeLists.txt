@@ -25,15 +25,13 @@ option(WITH_ALLOCATORS_BUILD "Include Allocators" ON)
 
 option(WITH_CORE_BUILD "Include Core" ON)
 
-option(WITH_MIDDLEWARE_BUILD "Include Middleware" ON)
+option(WITH_MIDDLEWARE_BUILD "Include Middleware" OFF)
 
-option(WITH_DB_BUILD "Include Database module" ON)
+option(WITH_DB_BUILD "Include Database module" OFF)
 
-option(WITH_WS_BUILD "Include WebSocket" ON)
+option(WITH_WS_BUILD "Include WebSocket" OFF)
 
-
-
-
+option(WITH_CORO_BUILD "Include Coroutine module" ON)
 
 
 add_subdirectory(3rdparty)
@@ -89,6 +87,14 @@ if(WITH_WS_BUILD)
     message("Configuring WebSocket module")
     add_subdirectory(ws)
     target_link_libraries(${PROJECT_NAME} INTERFACE libsrtlws::libsrtlws)
+
+endif()
+
+
+if(WITH_CORO_BUILD)
+    message("Configuring Coroutine module")
+    add_subdirectory(coro)
+    target_link_libraries(${PROJECT_NAME} INTERFACE libsrtlcoro::libsrtlcoro)
 
 endif()
 
