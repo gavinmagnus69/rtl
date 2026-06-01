@@ -15,7 +15,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 option(RTL_FETCH_MISSING_DEPS "Fetch missing dependencies" ON)
 
 # Selection of modules
-option(WITH_TESTS_BUILD "Include High-level tests" ON)
+option(WITH_TESTS_BUILD "Include High-level module tests" ON)
+
+option(WITH_EXAMPLES_BUILD "Include each module examples" ON)
 
 option(WITH_STP_BUILD "Include STP" ON)
 

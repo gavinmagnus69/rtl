@@ -4,7 +4,8 @@ IndentWidth: 2
 UseTab: Never
 MaxEmptyLinesToKeep: 2
 
-AccessModifierOffset: -4
+AccessModifierOffset: -2
+IndentAccessModifiers: false
 
 PointerAlignment: Left
 ReferenceAlignment: Left

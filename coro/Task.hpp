@@ -11,14 +11,14 @@ namespace rtl::coro {
 
 template <typename T>
 class Task {
-  public:
+public:
   struct promise_type {
     std::optional<T> current_value;
     std::exception_ptr exp;
     std::coroutine_handle<> continuation{};
 
     Task get_return_object() {
-      return Task{std::coroutine_handle<promise_type>::from_promise(*this)}; // *this is promise_type
+      return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
     };
 
     std::suspend_always initial_suspend() {
@@ -67,7 +67,7 @@ class Task {
   }
 
   Task(Task&& task) noexcept {
-    m_handle = std::move(task.m_handle);
+    m_handle = task.m_handle;
     task.m_handle = nullptr;
   };
 
@@ -80,7 +80,7 @@ class Task {
       if (m_handle) {
         m_handle.destroy();
       }
-      m_handle = std::move(task.m_handle);
+      m_handle = task.m_handle;
       task.m_handle = nullptr;
     }
     return *this;
@@ -126,7 +126,7 @@ class Task {
     Awaiter(const Awaiter&) = delete;
     Awaiter& operator=(const Awaiter&) = delete;
     Awaiter(Awaiter&& awaiter) noexcept {
-      this->handle = std::move(awaiter.handle);
+      this->handle = awaiter.handle;
       awaiter.handle = nullptr;
     };
     Awaiter& operator=(Awaiter&& awaiter) noexcept {
@@ -175,19 +175,22 @@ class Task {
     return std::move(*promise.current_value);
   };
 
-  Awaiter operator co_await() noexcept {
+  Awaiter operator co_await() & = delete;
+
+
+  Awaiter operator co_await() && noexcept {
     auto handle = m_handle;
     m_handle = nullptr;
     return Awaiter{handle};
   };
-  private:
+private:
   Handle m_handle;
 };
 
 
 template <>
 class Task<void> {
-  public:
+public:
   struct promise_type {
     std::exception_ptr exp;
     std::coroutine_handle<> continuation{};
@@ -239,7 +242,7 @@ class Task<void> {
   }
 
   Task(Task&& task) noexcept {
-    m_handle = std::move(task.m_handle);
+    m_handle = task.m_handle;
     task.m_handle = nullptr;
   };
 
@@ -253,11 +256,12 @@ class Task<void> {
         m_handle.destroy();
       }
 
-      m_handle = std::move(task.m_handle);
+      m_handle = task.m_handle;
       task.m_handle = nullptr;
     }
     return *this;
   };
+
 
   ~Task() {
     if (m_handle) {
@@ -296,7 +300,7 @@ class Task<void> {
     Awaiter(const Awaiter&) = delete;
     Awaiter& operator=(const Awaiter&) = delete;
     Awaiter(Awaiter&& awaiter) noexcept {
-      this->handle = std::move(awaiter.handle);
+      this->handle = awaiter.handle;
       awaiter.handle = nullptr;
     };
     Awaiter& operator=(Awaiter&& awaiter) noexcept {
@@ -343,12 +347,14 @@ class Task<void> {
   };
 
 
-  Awaiter operator co_await() noexcept {
+  Awaiter operator co_await() & = delete;
+
+  Awaiter operator co_await() && noexcept {
     auto handle = m_handle;
     m_handle = nullptr;
     return Awaiter{handle};
   };
-  private:
+private:
   Handle m_handle;
 };
 

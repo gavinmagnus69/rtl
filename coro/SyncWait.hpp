@@ -11,6 +11,8 @@
 
 namespace rtl::coro {
 
+
+namespace detail {
 template <typename T>
 struct SyncWaitState {
   std::mutex mtx;
@@ -69,11 +71,12 @@ inline Task<void> sync_wait_runner(Task<void> task, SyncWaitState<void>& state) 
   co_return;
 };
 
+}; // namespace detail
 
 template <typename T>
 T sync_wait(Task<T> task) {
-  SyncWaitState<T> state;
-  auto runner = sync_wait_runner(std::move(task), state);
+  detail::SyncWaitState<T> state;
+  auto runner = detail::sync_wait_runner(std::move(task), state);
   runner.resume();
   std::unique_lock lock{state.mtx};
   state.cv.wait(lock, [&]() { return state.done; });
@@ -88,8 +91,8 @@ T sync_wait(Task<T> task) {
 
 
 inline void sync_wait(Task<void> task) {
-  SyncWaitState<void> state;
-  auto runner = sync_wait_runner(std::move(task), state);
+  detail::SyncWaitState<void> state;
+  auto runner = detail::sync_wait_runner(std::move(task), state);
   runner.resume();
   std::unique_lock lock{state.mtx};
   state.cv.wait(lock, [&]() { return state.done; });
