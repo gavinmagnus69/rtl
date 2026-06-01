@@ -2,7 +2,6 @@
 
 #include <functional>
 #include <future>
-#include <stdexcept>
 
 #include "StpExceptions.hpp"
 
@@ -17,6 +16,7 @@ struct TaskOptions {
 using Task = std::function<void()>;
 
 struct IExecutor {
+public:
   virtual ~IExecutor() = default;
   // Accepted periodic tasks are fire-and-forget and return an invalid future.
   // Rejected periodic tasks return a valid future carrying TaskRejected.
@@ -41,9 +41,26 @@ struct IExecutor {
       return p.get_future();
     }
     return returnFuture;
-  }
-  protected:
-  virtual bool post(Task&& task, TaskOptions) = 0;
+  };
+
+  template <typename Func, typename... Args>
+  bool submit_fire_and_forget(Func&& func, Args&&... args) noexcept {
+    try {
+      return post(std::move(std::bind(std::forward<Func>(func), std::forward<Args>(args)...)), TaskOptions{});
+    } catch (...) {
+      return false;
+    }
+  };
+
+  bool submit_fire_and_forget(Task&& task) noexcept {
+    try {
+      return post(std::move(task), TaskOptions{});
+    } catch (...) {
+      return false;
+    }
+  };
+protected:
+  virtual bool post(Task&& task, TaskOptions) noexcept = 0;
 };
 
 }; // namespace stp

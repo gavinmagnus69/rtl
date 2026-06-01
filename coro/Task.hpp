@@ -3,8 +3,10 @@
 #include <coroutine>
 #include <exception>
 #include <optional>
-#include <stdexcept>
 #include <utility>
+
+
+#include "CoroExceptions.hpp"
 
 namespace rtl::coro {
 
@@ -109,14 +111,14 @@ public:
 
     T await_resume() {
       if (!handle) {
-        throw std::runtime_error{"Invalid coroutine"};
+        throw InvalidTask{"Invalid coroutine"};
       }
       auto& promise = handle.promise();
       if (promise.exp) {
         std::rethrow_exception(promise.exp);
       }
       if (!promise.current_value.has_value()) {
-        throw std::runtime_error{"Empty value"};
+        throw EmptyResult{"Empty value"};
       }
       return std::move(*promise.current_value);
     };
@@ -160,17 +162,17 @@ public:
 
   T result() {
     if (!done()) {
-      throw std::runtime_error{"Coroutine not finished yet"};
+      throw TaskNotReady{"Coroutine not finished yet"};
     }
     if (m_handle == nullptr) {
-      throw std::runtime_error{"Invalid handler"};
+      throw InvalidTask{"Invalid handler"};
     }
     auto& promise = m_handle.promise();
     if (promise.exp) {
       std::rethrow_exception(promise.exp);
     };
     if (!promise.current_value.has_value()) {
-      throw std::runtime_error{"Empty value"};
+      throw EmptyResult{"Empty value"};
     }
     return std::move(*promise.current_value);
   };
@@ -286,7 +288,7 @@ public:
 
     void await_resume() {
       if (!handle) {
-        throw std::runtime_error{"Invalid coroutine"};
+        throw InvalidTask{"Invalid coroutine"};
       }
       auto& promise = handle.promise();
       if (promise.exp) {
@@ -335,10 +337,10 @@ public:
 
   void result() {
     if (!done()) {
-      throw std::runtime_error{"Coroutine not finished yet"};
+      throw TaskNotReady{"Coroutine not finished yet"};
     }
     if (m_handle == nullptr) {
-      throw std::runtime_error{"Invalid handler"};
+      throw InvalidTask{"Invalid handler"};
     }
     auto& promise = m_handle.promise();
     if (promise.exp) {

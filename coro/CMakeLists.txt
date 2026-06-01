@@ -27,6 +27,9 @@ PUBLIC ${public_hpp}
 PRIVATE ${private_cpp}
 )
 
+
+target_link_libraries(${PROJECT_NAME} PUBLIC librtlstp::librtlstp)
+
 if(WITH_TESTS_BUILD)
   add_subdirectory(tests)
 endif()

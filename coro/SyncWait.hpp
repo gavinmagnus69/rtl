@@ -4,8 +4,8 @@
 #include <exception>
 #include <mutex>
 #include <optional>
-#include <stdexcept>
 
+#include "CoroExceptions.hpp"
 #include "Task.hpp"
 
 
@@ -84,7 +84,7 @@ T sync_wait(Task<T> task) {
     std::rethrow_exception(state.exception);
   }
   if (!state.result.has_value()) {
-    throw std::runtime_error{"Task completed without result"};
+    throw EmptyResult{"Task completed without result"};
   }
   return std::move(*state.result);
 };
