@@ -1,6 +1,5 @@
 #pragma once
 
-#include <exception>
 #include <memory>
 
 #include "IExecutor.hpp"
@@ -10,7 +9,7 @@ namespace rtl {
 namespace stp {
 
 struct ThreadPoolExecutor final : public IExecutor {
-  public:
+public:
   virtual ~ThreadPoolExecutor() override {
   }
 
@@ -21,8 +20,8 @@ struct ThreadPoolExecutor final : public IExecutor {
   ThreadPoolExecutor(size_t current_threads = 6, size_t max_threads = 20) {
     m_threadPool = std::make_unique<ThreadPool>(current_threads, max_threads, max_threads);
   }
-  protected:
-  virtual bool post(Task&& task, TaskOptions opt) final {
+protected:
+  virtual bool post(Task&& task, TaskOptions opt) noexcept final {
     if (!m_threadPool) {
       return false;
     }
@@ -41,7 +40,7 @@ struct ThreadPoolExecutor final : public IExecutor {
       return false;
     };
   }
-  private:
+private:
   std::unique_ptr<ThreadPool> m_threadPool;
 };
 

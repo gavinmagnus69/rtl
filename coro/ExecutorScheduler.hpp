@@ -3,6 +3,7 @@
 #include "IExecutor.hpp"
 
 #include <coroutine>
+#include <memory>
 
 namespace rtl::coro {
 class ExecutorScheduler {
