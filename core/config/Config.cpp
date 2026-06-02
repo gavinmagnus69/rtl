@@ -1,4 +1,4 @@
 #include "Config.hpp"
 
 
-namespace core::config {};
+namespace rtl::core::config {};
