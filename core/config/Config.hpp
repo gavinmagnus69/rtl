@@ -8,6 +8,7 @@
 #include <string>
 
 #include "nlohmann/json.hpp"
+#include "nlohmann/json_fwd.hpp"
 #include "spdlog/spdlog.h"
 
 // using SettingsReadOnly = ReadOnlyAccessor<T, JsonSerializer<T>>;
@@ -95,6 +96,10 @@ public:
     }
     SPDLOG_ERROR("Config key '{}' not found or has wrong type", dottedKey);
     return defaultValue;
+  };
+
+  nlohmann::json getRaw() const {
+    return m_rawConfig;
   };
 
   // Read-only settings
