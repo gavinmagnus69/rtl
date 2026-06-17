@@ -21,7 +21,7 @@ namespace stp {
 
 template <class T, class Compare = std::less<T>, class Container = std::vector<T>>
 class MovablePriorityQueue {
-  public:
+public:
   using value_type = T;
 
   MovablePriorityQueue() = default;
@@ -53,7 +53,7 @@ class MovablePriorityQueue {
   void clear() {
     m_heap.clear();
   }
-  private:
+private:
   Compare m_compare{};
   Container m_heap{};
 };
@@ -118,6 +118,37 @@ struct ContainerOps<std::list<T, Allocator>> {
     buffer.clear();
   }
 };
+
+
+template <class T, class Allocator>
+struct ContainerOps<std::vector<T, Allocator>> {
+  using container_type = std::vector<T, Allocator>;
+  using value_type = typename container_type::value_type;
+
+  template <typename U>
+  static void push(container_type& buffer, U&& task) {
+    buffer.emplace_back(std::forward<U>(task));
+  }
+  // TODO: vector pops only back element
+  static value_type pop(container_type& buffer) {
+    value_type task = std::move(buffer.back());
+    buffer.pop_back();
+    return task;
+  }
+
+  static bool empty(const container_type& buffer) {
+    return buffer.empty();
+  }
+
+  static size_t size(const container_type& buffer) {
+    return buffer.size();
+  }
+
+  static void clear(container_type& buffer) {
+    buffer.clear();
+  }
+};
+
 
 template <class T, class SequenceContainer, class Compare>
 struct ContainerOps<std::priority_queue<T, SequenceContainer, Compare>> {
@@ -187,7 +218,7 @@ struct TakeResult {
 
 template <class T, class Container = std::deque<T>>
 class UnbMpMcTemplateQueue {
-  public:
+public:
   using Ops = ContainerOps<Container>;
 
   enum class PutResultErrorCode : uint8_t { accepted, closed, full, timeout };
@@ -328,7 +359,11 @@ class UnbMpMcTemplateQueue {
     std::lock_guard lock(m_mutex);
     m_maxQueueSize = max_queue_size;
   };
-  private:
+
+  Container& raw_container_unsafe() {
+    return m_buffer;
+  };
+private:
   enum class ContainerState : uint8_t { open, closing };
 
   T takeLocked() {

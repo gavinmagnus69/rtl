@@ -4,10 +4,12 @@
 #include <atomic>
 #include <optional>
 
+
+// UNDER CONSTRUCTION
 // Michael-Scott queue
 template <typename T>
 class LockFreeQueue {
-  public:
+public:
   struct Node {
     std::optional<T> m_value{};
     std::atomic<Node*> next{nullptr};
@@ -72,7 +74,7 @@ class LockFreeQueue {
       }
     }
   }
-  private:
+private:
   std::atomic<Node*> m_head{nullptr};
   std::atomic<Node*> m_tail{nullptr};
 };
