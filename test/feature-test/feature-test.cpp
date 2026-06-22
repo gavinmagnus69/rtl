@@ -2,6 +2,7 @@
 #include <chrono>
 #include <future>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -9,7 +10,9 @@
 
 #include <IExecutor.hpp>
 #include <RtlThreadPool.hpp>
+#include <RtlTimer.hpp>
 #include <ThreadPoolExecutor.hpp>
+
 
 namespace {
 
@@ -425,10 +428,37 @@ void test_executor_periodic_rejection_future() {
   require(caught, "executor periodic rejection was not surfaced by future");
 }
 
+
+void test_timer_expired() {
+  using Timer = rtl::stp::RtlTimer;
+  std::shared_ptr<rtl::stp::IExecutor> executor = rtl::stp::makeThreadPoolExecutor(2, 4);
+  require(static_cast<bool>(executor), "makeThreadPoolExecutor returned nullptr");
+  rtl::stp::TaskOptions options{.is_periodic = false, .periodic_interval_ms = 0};
+  Timer timer{executor};
+  timer.expires_after(std::chrono::milliseconds{3000});
+  timer.async_wait([](Timer::Result result) { require(result == Timer::Result::expired, "Timer should expire, but it did not"); });
+  std::this_thread::sleep_for(std::chrono::milliseconds{5000});
+};
+
+
+void test_timer_cancelled() {
+  using Timer = rtl::stp::RtlTimer;
+  std::shared_ptr<rtl::stp::IExecutor> executor = rtl::stp::makeThreadPoolExecutor(2, 4);
+  require(static_cast<bool>(executor), "makeThreadPoolExecutor returned nullptr");
+  rtl::stp::TaskOptions options{.is_periodic = false, .periodic_interval_ms = 0};
+  Timer timer{executor};
+  timer.expires_after(std::chrono::milliseconds{5000});
+  timer.async_wait([](Timer::Result result) { require(result == Timer::Result::cancelled, "Timer should be cancelled, but it did not"); });
+  std::this_thread::sleep_for(std::chrono::milliseconds{1000});
+  timer.cancel();
+  std::this_thread::sleep_for(std::chrono::milliseconds{5000});
+};
+
 void run_test(void (*test)(), const char* name) {
   test();
   std::cout << "[PASS] " << name << '\n';
 }
+
 
 } // namespace
 
@@ -454,6 +484,9 @@ int main() {
     run_test(test_executor_one_shot_rejection_future, "executor_one_shot_rejection_future");
     run_test(test_executor_periodic_submit_success_returns_invalid_future, "executor_periodic_submit_success_returns_invalid_future");
     run_test(test_executor_periodic_rejection_future, "executor_periodic_rejection_future");
+    run_test(test_timer_expired, "test_timer_expired");
+    run_test(test_timer_cancelled, "test_timer_cancelled");
+
   } catch (const std::exception& exp) {
     std::cerr << "[FAIL] " << exp.what() << '\n';
     return 1;
