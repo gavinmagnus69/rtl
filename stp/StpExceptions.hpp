@@ -1,27 +1,30 @@
 #pragma once
 
+#include <exception>
+#include <future>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
 
 namespace rtl::stp {
 
 enum class ErrorCode { unknown, pool_stopped, task_rejected, queue_closed, queue_full, invalid_pool_options };
 
 class ThreadPoolError : public std::runtime_error {
-  public:
+public:
   ThreadPoolError(ErrorCode code, std::string_view message)
       : std::runtime_error(std::string(message))
       , m_code(code) {};
   [[nodiscard]] ErrorCode code() const noexcept {
     return m_code;
   }
-  private:
+private:
   ErrorCode m_code{rtl::stp::ErrorCode::unknown};
 };
 
 class ThreadPoolStopped : public ThreadPoolError {
-  public:
+public:
   explicit ThreadPoolStopped()
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::pool_stopped, "Thread pool is stopped") {};
 
@@ -31,7 +34,7 @@ class ThreadPoolStopped : public ThreadPoolError {
 };
 
 class TaskRejected : public ThreadPoolError {
-  public:
+public:
   explicit TaskRejected()
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::task_rejected, "Task rejected") {};
   explicit TaskRejected(std::string_view message)
@@ -40,7 +43,7 @@ class TaskRejected : public ThreadPoolError {
 };
 
 class QueueClosed : public ThreadPoolError {
-  public:
+public:
   explicit QueueClosed()
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::queue_closed, "Queue is closed") {
   }
@@ -50,7 +53,7 @@ class QueueClosed : public ThreadPoolError {
 };
 
 class QueueFull : public ThreadPoolError {
-  public:
+public:
   explicit QueueFull()
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::queue_full, "Queue is full") {
   }
@@ -60,7 +63,7 @@ class QueueFull : public ThreadPoolError {
 };
 
 class InvalidPoolOptions : public ThreadPoolError {
-  public:
+public:
   explicit InvalidPoolOptions()
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::invalid_pool_options, "Invalid pool options") {
   }
@@ -68,5 +71,20 @@ class InvalidPoolOptions : public ThreadPoolError {
       : rtl::stp::ThreadPoolError(rtl::stp::ErrorCode::invalid_pool_options, message) {
   }
 };
+
+template <typename T>
+std::future<T> make_exceptional_future(std::exception_ptr ptr) {
+  std::promise<T> promise;
+  auto future = promise.get_future();
+  promise.set_exception(ptr);
+  return future;
+};
+
+
+template <typename T, typename Exception>
+std::future<T> make_exceptional_future(Exception&& exp) {
+  return make_exceptional_future<T>(std::make_exception_ptr(std::forward<Exception>(exp)));
+};
+
 
 }; // namespace rtl::stp

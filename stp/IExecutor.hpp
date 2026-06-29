@@ -26,9 +26,7 @@ public:
     if (opt.is_periodic) {
       bool postFlag = post(std::move(std::bind(std::forward<Func>(func), std::forward<Args>(args)...)), opt);
       if (!postFlag) {
-        std::promise<ReturnType> p;
-        p.set_exception(std::make_exception_ptr(TaskRejected{}));
-        return p.get_future();
+        return make_exceptional_future<ReturnType>(std::make_exception_ptr(TaskRejected{}));
       };
       return std::future<ReturnType>{};
     }
@@ -36,9 +34,7 @@ public:
     auto returnFuture = boundPackagedTaskPtr->get_future();
     if (!post(std::move([boundPackagedTaskPtr]() mutable { (*boundPackagedTaskPtr)(); }), opt)) {
       // failed to put task into executor
-      std::promise<ReturnType> p;
-      p.set_exception(std::make_exception_ptr(TaskRejected{}));
-      return p.get_future();
+      return make_exceptional_future<ReturnType>(std::make_exception_ptr(TaskRejected{}));
     }
     return returnFuture;
   };
