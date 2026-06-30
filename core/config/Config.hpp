@@ -98,6 +98,17 @@ public:
     return defaultValue;
   };
 
+  template <class T>
+  bool setValue(const std::string& dottedKey, T&& value) {
+    nlohmann::json* node = findNode(dottedKey);
+    if (node == nullptr) {
+      SPDLOG_ERROR("Failed to find {} and set in config", dottedKey);
+      return false;
+    }
+    *node = std::forward<T>(value);
+    return true;
+  }
+
   nlohmann::json getRaw() const {
     return m_rawConfig;
   };
@@ -160,11 +171,33 @@ private:
       SPDLOG_DEBUG("Traversing config node: '{}'", segment);
       if (!currentNode->is_object()) {
         return nullptr;
-      }
+      };
       auto it = currentNode->find(segment);
       if (it == currentNode->end()) {
         return nullptr;
-      }
+      };
+      currentNode = &(*it);
+    }
+    return currentNode;
+  };
+
+
+  nlohmann::json* findNode(const std::string& dottedKey) noexcept {
+    if (m_rawConfig.is_null()) {
+      return nullptr;
+    }
+    nlohmann::json* currentNode = &m_rawConfig;
+    std::stringstream ss(dottedKey);
+    std::string segment;
+    while (std::getline(ss, segment, '.')) {
+      SPDLOG_DEBUG("Traversing config node: '{}'", segment);
+      if (!currentNode->is_object()) {
+        return nullptr;
+      };
+      auto it = currentNode->find(segment);
+      if (it == currentNode->end()) {
+        return nullptr;
+      };
       currentNode = &(*it);
     }
     return currentNode;
