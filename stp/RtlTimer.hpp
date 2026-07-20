@@ -5,6 +5,7 @@
 #include <functional>
 #include <utility>
 
+
 #include "IExecutor.hpp"
 
 
@@ -20,12 +21,16 @@ public:
   explicit RtlTimer(std::shared_ptr<IExecutor> executor)
       : m_executor(std::move(executor)) {
     if (m_executor) {
-      m_executor->submit(TaskOptions{}, [this]() { run_timer(); });
+      m_timerThreadFuture = m_executor->submit(TaskOptions{}, [this]() { run_timer(); });
     };
   };
 
   ~RtlTimer() {
-    shutdown();
+    try {
+      shutdown();
+      m_timerThreadFuture.get();
+    } catch (...) {
+    };
   };
 
   RtlTimer(const RtlTimer&) = delete;
@@ -148,6 +153,7 @@ private:
   bool m_cancelRequested{false};
   bool m_stopping{false};
   size_t m_version{0};
+  std::future<void> m_timerThreadFuture;
   std::shared_ptr<IExecutor> m_executor{nullptr};
 }; // namespace rtl::stp
 }; // namespace rtl::stp
